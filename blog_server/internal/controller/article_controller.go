@@ -12,10 +12,12 @@ import (
 
 type ArticleController struct {
 	articleService service.ArticleService
+	// [NEW] 注入 CommentService，为了实现“二合一”接口
+	commentService service.CommentService
 }
 
-func NewArticleController(articleService service.ArticleService) *ArticleController {
-	return &ArticleController{articleService: articleService}
+func NewArticleController(articleService service.ArticleService, commentService service.CommentService) *ArticleController {
+	return &ArticleController{articleService: articleService, commentService: commentService}
 }
 
 // 修改 List 方法 (演示旧接口怎么改用 Result)
@@ -157,5 +159,48 @@ func (ctrl *ArticleController) GetLikeRanking(c *gin.Context) {
 func (ctrl *ArticleController) GetIndexData(c *gin.Context) {
     // 调用 Service 的聚合方法
 	result, _ := ctrl.articleService.GetIndexData()
+	c.JSON(http.StatusOK, result)
+}
+
+// [NEW] 二合一接口：获取文章详情 + 第一页评论
+// 对应 Java: getArticleAndFirstPageCommentByArticleId
+func (ctrl *ArticleController) GetArticleAndComments(c *gin.Context) {
+	// 1. 获取 articleId (URL 参数)
+	articleIdStr := c.Query("articleId")
+	articleId, _ := strconv.Atoi(articleIdStr)
+
+	// 2. 获取分页参数 (Body JSON)
+	var pageParams utils.PageParams
+	if err := c.ShouldBindJSON(&pageParams); err != nil {
+		// 如果没传分页，默认第一页
+		pageParams = utils.PageParams{Page: 1, Rows: 10}
+	}
+
+	result := utils.Ok()
+
+	// 3. 并行或串行调用 Service
+	// A. 查文章
+	article, err := ctrl.articleService.GetArticleDetail(articleId)
+	if err != nil || article == nil {
+		c.JSON(http.StatusOK, utils.Error("文章不存在或已被删除"))
+		return
+	}
+	result.Put("article", article)
+
+	// B. 查评论 (调用注入进来的 commentService)
+	// 注意：GetComments 返回的是 *Result，我们需要取出里面的 map
+	commentRes, err := ctrl.commentService.GetComments(articleId, &pageParams)
+	if err == nil && commentRes.Success {
+		result.Put("comments", commentRes.Map["comments"])
+		result.Put("total", commentRes.Map["total"])
+		// 如果前端需要 pageParams 回传
+		pageParams.Total = commentRes.Map["total"].(int64)
+		result.Put("pageParams", pageParams)
+	} else {
+		// 即使评论挂了，文章也该显示，给个空列表
+		result.Put("comments", []interface{}{})
+		result.Put("total", 0)
+	}
+
 	c.JSON(http.StatusOK, result)
 }

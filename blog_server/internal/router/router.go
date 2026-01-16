@@ -41,16 +41,29 @@ func InitRouter() *gin.Engine {
 	userRepo := repository.NewUserRepository(db)
 	articleRepo := repository.NewArticleRepository(db)
 	tagRepo := repository.NewTagRepository(db) // [NEW] 新增 TagRepo
+	// [NEW]
+  commentRepo := repository.NewCommentRepository(db)
+	// [NEW] 通知 Repo
+  notifyRepo := repository.NewNotificationRepository(db)
 
 	// --- Service 层 (业务逻辑) ---
 	userSvc := service.NewUserService(userRepo)
 	// [NEW] ArticleService 现在需要注入两个 Repo (Article + Tag)
 	articleSvc := service.NewArticleService(articleRepo, tagRepo)
+	// [NEW] 注意这里注入了 userRepo，因为 Service 里要查用户头像
+  commentSvc := service.NewCommentService(commentRepo, userRepo)
+	// [NEW] 通知 Service
+  notifySvc := service.NewNotificationService(notifyRepo)
 
 	// --- Controller 层 (接口入口) ---
 	userCtrl := controller.NewUserController(userSvc)
-	articleCtrl := controller.NewArticleController(articleSvc)
+	// [MODIFIED] ArticleController 现在需要注入 commentSvc 了！！！
+  articleCtrl := controller.NewArticleController(articleSvc, commentSvc)
 	fileCtrl := new(controller.FileController)
+	// [NEW]
+  commentCtrl := controller.NewCommentController(commentSvc)
+	// [NEW] 通知 Controller
+	notifyCtrl := controller.NewNotificationController(notifySvc)
 
 	// ==========================================
 	// 4. 路由注册
@@ -88,6 +101,9 @@ func InitRouter() *gin.Engine {
 		apiGroup.GET("/article/getAllTags", articleCtrl.GetAllTags)         // 标签云
 		apiGroup.GET("/article/getLikeRanking", articleCtrl.GetLikeRanking) // 阅读/点赞排行
 
+		// [NEW] 二合一接口 (修复 404)
+    apiGroup.POST("/article/getArticleAndFirstPageCommentByArticleId", articleCtrl.GetArticleAndComments)
+
 		// 2. 文章操作接口
 		apiGroup.POST("/article/getAPageOfArticle", articleCtrl.GetPage) // 分页查询
 		apiGroup.POST("/article/publishArticle", articleCtrl.Publish)    // 发布/编辑
@@ -97,6 +113,17 @@ func InitRouter() *gin.Engine {
 		// (这些放在最后，防止 "getAllTags" 被当成 id 解析)
 		apiGroup.GET("/articles", articleCtrl.List)    // 普通列表
 		apiGroup.GET("/article/:id", articleCtrl.Detail) // 文章详情
+
+		// 🔔 通知模块
+  	apiGroup.GET("/notification/unreadCount", notifyCtrl.GetUnreadCount)
+		
+		// 💬 评论模块
+    apiGroup.POST("/comment/getAPageCommentByArticleId", commentCtrl.GetComments)
+    apiGroup.POST("/comment/insert", commentCtrl.InsertComment)
+		
+    // 🗣️ 回复模块
+    apiGroup.GET("/reply/getReplies", commentCtrl.GetReplies) // 可能是 GET 或 POST
+    apiGroup.POST("/reply/insert", commentCtrl.InsertReply)
 	}
 
 	return r
