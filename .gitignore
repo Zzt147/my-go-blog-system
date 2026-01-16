@@ -1,0 +1,26 @@
+# --- Go 后端忽略项 ---
+blog_server/*.exe
+blog_server/*.exe~
+blog_server/tmp/
+# 如果你的上传目录在项目里，记得忽略它
+blog_server/upload/
+# Go 编译产生的临时文件
+*.log
+*.out
+
+# --- Vue 前端忽略项 ---
+myblog/node_modules/
+myblog/dist/
+myblog/npm-debug.log*
+myblog/yarn-debug.log*
+myblog/yarn-error.log*
+
+# --- IDE 忽略项 (GoLand/VSCode) ---
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# --- 系统文件 ---
+.DS_Store
+Thumbs.debug
