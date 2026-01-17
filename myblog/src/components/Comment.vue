@@ -57,27 +57,38 @@ function toggleReplies() {
 }
 
 // 点击"回复"按钮 (准备回复)
-async function prepareReply(targetUser) {
+// isFloor: true 表示回复的是层主(文章评论)，false 表示回复的是楼中楼
+async function prepareReply(targetUser, isFloor = true) {
   // 1. 检查登录
   if (!store.user.user) {
     ElMessage.warning("请先登录！")
     return
   }
 
-  // 2. 设置目标
-  if (targetUser) {
-    currentTargetUid.value = targetUser.id
-    replyPlaceholder.value = `回复 @${targetUser.username}:`
+  // 2. 设置目标 ID (数据层面：无论如何都记录 ID)
+  // 兼容直接传对象(reply) 或 手动构造的对象 {id:..., username:...}
+  if (targetUser && (targetUser.id || targetUser.userId || targetUser.user_id)) {
+    currentTargetUid.value = targetUser.id || targetUser.userId || targetUser.user_id
   } else {
-    currentTargetUid.value = null // 回复层主
-    replyPlaceholder.value = `回复 @${props.comment.author}:`
+    // 兜底
+    currentTargetUid.value = props.comment.userId || props.comment.user_id
   }
 
-  // 3. 显示输入框
+  // 3. 设置输入框提示文案 (视觉层面：区别对待)
+// 3. 设置文案
+  if (isFloor) {
+    console.log('👉 [调试] 进入 isFloor = true 分支');
+    replyPlaceholder.value = '回复层主...'
+  } else {
+    console.log('👉 [调试] 进入 isFloor = false 分支');
+    const name = targetUser.username || targetUser.author || '用户'
+    replyPlaceholder.value = `回复 @${name}:`
+  }
+
+  // 4. 显示输入框
   showReplyInput.value = true
   replyContent.value = ""
 
-  // 等待 DOM 更新后自动聚焦
   await nextTick()
   if (replyInputRef.value) {
     replyInputRef.value.focus()
@@ -128,9 +139,9 @@ function likeTargetComment(commentObj, type) {
 
   let url = ''
   if (type === 'REPLY') {
-      url = '/api/reply/likeReply?replyId=' + commentObj.id
+    url = '/api/reply/likeReply?replyId=' + commentObj.id
   } else {
-      url = '/api/comment/likeComment?commentId=' + commentObj.id
+    url = '/api/comment/likeComment?commentId=' + commentObj.id
   }
 
   axios.post(url)
@@ -178,13 +189,15 @@ function likeTargetComment(commentObj, type) {
               <font-awesome-icon :icon="faThumbsUp" :class="{ 'liked': comment.likes > 0 }" />
               <span class="action-text">{{ comment.likes || 0 }}</span>
             </span>
-            <span class="action-item reply-action" @click="prepareReply(null)">
+            <span class="action-item reply-action" @click="prepareReply({
+              id: (comment.userId || comment.user_id),
+              username: comment.author
+            }, true)">
               <font-awesome-icon :icon="faCommentDots" style="margin-right: 4px;" />
               <span class="action-text">回复</span>
             </span>
           </div>
         </div>
-
       </div>
     </div>
 
@@ -218,7 +231,7 @@ function likeTargetComment(commentObj, type) {
               <font-awesome-icon :icon="faThumbsUp" style="margin-right: 4px;" />
               {{ reply.likes || 0 }}
             </span>
-            <span class="action-btn" @click="prepareReply({ id: reply.userId, username: reply.username })">
+            <span class="action-btn" @click="prepareReply({ id: reply.userId, username: reply.username }, false)">
               <font-awesome-icon :icon="faCommentDots" style="margin-right: 4px;" />
               回复
             </span>

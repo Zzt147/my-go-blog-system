@@ -1,28 +1,70 @@
 package controller
+
 import (
 	"my-blog/internal/service"
 	"my-blog/pkg/utils"
 	"net/http"
+	"strconv"
+
 	"github.com/gin-gonic/gin"
 )
 
 type NotificationController struct {
-	service service.NotificationService
+	notifyService service.NotificationService
 }
 
-func NewNotificationController(service service.NotificationService) *NotificationController {
-	return &NotificationController{service: service}
+func NewNotificationController(notifyService service.NotificationService) *NotificationController {
+	return &NotificationController{notifyService: notifyService}
 }
 
-// GetUnreadCount 获取未读数量
+// [GET] /api/notification/unreadCount
 func (ctrl *NotificationController) GetUnreadCount(c *gin.Context) {
-	// 暂时写死 ID=1 (管理员)，后面接了 JWT 可以从 c.Get("userId") 拿
-	userId := 1 
-	
-	count, err := ctrl.service.GetUnreadCount(userId)
+	// 暂时写死 userId = 1，后续修复 CurrentUser 后可从 Token 获取
+	userId := 1
+	count, err := ctrl.notifyService.GetUnreadCount(userId)
 	if err != nil {
-		c.JSON(http.StatusOK, utils.Error("获取消息失败"))
+		c.JSON(http.StatusOK, utils.Error(err.Error()))
 		return
 	}
-	c.JSON(http.StatusOK, utils.Ok().Put("data", count)) // 前端可能直接用 data
+	c.JSON(http.StatusOK, utils.Ok().Put("count", count))
+}
+
+// [POST] /api/notification/getAPageNotification
+func (ctrl *NotificationController) GetPage(c *gin.Context) {
+	var params utils.PageParams
+	if err := c.ShouldBindJSON(&params); err != nil {
+		params = utils.PageParams{Page: 1, Rows: 10}
+	}
+
+	userId := 1 // 暂时写死
+	res, err := ctrl.notifyService.GetPage(userId, params.Page, params.Rows)
+	if err != nil {
+		c.JSON(http.StatusOK, utils.Error(err.Error()))
+		return
+	}
+	c.JSON(http.StatusOK, res)
+}
+
+// [GET] /api/notification/read/:id
+func (ctrl *NotificationController) Read(c *gin.Context) {
+	idStr := c.Param("id")
+	id, _ := strconv.Atoi(idStr)
+
+	err := ctrl.notifyService.MarkAsRead(id)
+	if err != nil {
+		c.JSON(http.StatusOK, utils.Error("操作失败"))
+		return
+	}
+	c.JSON(http.StatusOK, utils.Ok().Put("msg", "已读"))
+}
+
+// [POST] /api/notification/readAll
+func (ctrl *NotificationController) ReadAll(c *gin.Context) {
+	userId := 1 // 暂时写死
+	err := ctrl.notifyService.MarkAllAsRead(userId)
+	if err != nil {
+		c.JSON(http.StatusOK, utils.Error("操作失败"))
+		return
+	}
+	c.JSON(http.StatusOK, utils.Ok().Put("msg", "全部已读"))
 }

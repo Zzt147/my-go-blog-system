@@ -220,11 +220,11 @@ func (s *articleService) LikeArticle(userId, articleId int) (string, error) {
 			article, _ := s.repo.FindById(articleId)
 			if article != nil && article.UserId != userId {
 				notify := &model.Notification{
-					UserId:  article.UserId,
-					Content: fmt.Sprintf("点赞了你的文章: %s", article.Title),
-					Type:    "LIKE", // 通知类型
-					Status:  0,
-					Created: time.Now(),
+					ReceiverId: article.UserId,
+					Content:    fmt.Sprintf("点赞了你的文章: %s", article.Title),
+					Type:       "LIKE", // 通知类型
+					Status:     0,
+					Created:    time.Now(),
 				}
 				s.notifyRepo.Create(notify)
 			}

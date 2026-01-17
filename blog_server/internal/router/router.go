@@ -116,7 +116,20 @@ func InitRouter() *gin.Engine {
 		apiGroup.GET("/article/:id", articleCtrl.Detail) // 文章详情
 
 		// 🔔 通知模块
-		apiGroup.GET("/notification/unreadCount", notifyCtrl.GetUnreadCount)
+		notifyGroup := apiGroup.Group("/notification")
+		{
+			// 获取未读数 (Top栏小红点用)
+			notifyGroup.GET("/unreadCount", notifyCtrl.GetUnreadCount)
+
+			// 获取通知列表 (消息中心用)
+			notifyGroup.POST("/getAPageNotification", notifyCtrl.GetPage)
+
+			// 标记单条已读 (点击消息时用)
+			notifyGroup.GET("/read/:id", notifyCtrl.Read)
+
+			// 标记全部已读 (一键清除)
+			notifyGroup.POST("/readAll", notifyCtrl.ReadAll)
+		}
 
 		// 💬 评论模块
 		apiGroup.POST("/comment/getAPageCommentByArticleId", commentCtrl.GetComments)

@@ -16,7 +16,7 @@ const toAdminMain = inject('toAdminMain')
 const userName = ref("")
 const isLogined = ref(false)
 const unreadCount = ref(0) // 未读消息数
-const notificationList = ref([]) // 消息列表
+const notifications = ref([]) // 消息列表
 
 // === ✅【新增】判断是否是管理员 ===
 const isAdmin = computed(() => {
@@ -47,7 +47,8 @@ function getUnreadCount() {
   if (!isLogined.value) return
   axios.get('/api/notification/unreadCount').then(res => {
     if (res.data.success) {
-      unreadCount.value = res.data.map.count
+      // 后端返回结构是 res.data.map.count
+      unreadCount.value = res.data.map.count || 0
     }
   })
 }
@@ -55,19 +56,28 @@ function getUnreadCount() {
 // === 新增：获取消息列表 ===
 function getNotifications() {
   if (!isLogined.value) return
-  axios.get('/api/notification/list').then(res => {
+  // ✅ 改为调用新的 Go 接口 (POST /getAPageNotification)
+  axios.post('/api/notification/getAPageNotification', {
+    page: 1,
+    rows: 5 // 下拉框只显示前 5 条
+  }).then(res => {
     if (res.data.success) {
-      notificationList.value = res.data.map.list
+      // 后端返回结构是 res.data.map.data
+      notifications.value = res.data.map.data || []
     }
   })
 }
 
 // === 新增：一键已读 ===
+// 全部已读
 function markAllRead() {
-  axios.post('/api/notification/markAllRead').then(res => {
-    unreadCount.value = 0
-    // 将列表里的状态也改为已读
-    notificationList.value.forEach(item => item.isRead = true)
+  axios.post('/api/notification/readAll').then(res => {
+    if (res.data.success) {
+      unreadCount.value = 0
+      // 🔴 修改前: item.isRead = true
+      // 🟢 修改后: item.status = 1
+      notifications.value.forEach(item => item.status = 1)
+    }
   })
 }
 
@@ -152,9 +162,9 @@ function toPersonalCenter() {
               <el-button link type="primary" size="small" @click="markAllRead">全部已读</el-button>
             </div>
             <el-divider style="margin: 10px 0" />
-            <div v-if="notificationList.length === 0" style="text-align: center; color: #999;">暂无消息</div>
+            <div v-if="notifications.length === 0" style="text-align: center; color: #999;">暂无消息</div>
             <ul v-else class="msg-list">
-              <li v-for="item in notificationList" :key="item.id" :class="{ unread: !item.isRead }"
+              <li v-for="item in notifications" :key="item.id" :class="{ unread: item.status === 0 }"
                 @click="readNotification(item)">
                 <div class="msg-title">
                   <el-tag size="small" :type="item.type === 'COMMENT' ? 'success' : 'warning'">

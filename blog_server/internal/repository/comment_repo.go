@@ -27,6 +27,9 @@ type CommentRepository interface {
 	// [NEW] 新增：分页获取评论
 	// 返回值：评论列表, 总数, 错误
 	GetPage(articleId, page, rows int) ([]*model.Comment, int64, error)
+
+	// [NEW] 更新文章的评论数
+	UpdateArticleCommentCount(articleId int, step int) error
 }
 
 type commentRepository struct {
@@ -134,4 +137,28 @@ func (r *commentRepository) GetPage(articleId, page, rows int) ([]*model.Comment
 		Find(&comments).Error
 
 	return comments, total, err
+}
+
+// 2. 在文件末尾实现该方法：
+func (r *commentRepository) UpdateArticleCommentCount(articleId int, step int) error {
+	// 逻辑：先检查统计记录是否存在，不存在则初始化，存在则更新
+	var count int64
+	// 注意：这里需要引入 model 包
+	r.db.Table("t_statistic").Where("article_id = ?", articleId).Count(&count)
+
+	if count == 0 {
+		// 如果还没有统计记录，先创建一条 (hits=0, likes=0, comments_num=0)
+		// 注意这里用 map 或者结构体插入都行，只要表名对
+		r.db.Table("t_statistic").Create(map[string]interface{}{
+			"article_id":   articleId,
+			"comments_num": 0,
+			"hits":         0,
+			"likes":        0,
+		})
+	}
+
+	// 执行更新：comments_num = comments_num + step
+	return r.db.Table("t_statistic").
+		Where("article_id = ?", articleId).
+		UpdateColumn("comments_num", gorm.Expr("comments_num + ?", step)).Error
 }
