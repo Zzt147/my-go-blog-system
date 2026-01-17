@@ -2,6 +2,7 @@ package repository
 
 import (
 	"my-blog/internal/model"
+
 	"gorm.io/gorm"
 )
 
@@ -20,6 +21,14 @@ type ArticleRepository interface {
 	Delete(id int) error
 	// 获取排行 (连表查询 t_article + t_statistic)
 	GetLikeRanking(limit int) ([]model.Article, error)
+	// [NEW] 点赞相关
+	FindArticleLike(userId, articleId int) (*model.ArticleLike, error)
+	AddArticleLike(like *model.ArticleLike) error
+	DeleteArticleLike(userId, articleId int) error
+	UpdateArticleLikesCount(articleId int, step int) error
+
+	// [NEW] 新增：更新阅读量
+	UpdateReadCount(articleId int) error
 }
 
 // 2. 结构体实现
@@ -40,13 +49,16 @@ func (r *articleRepository) FindAll() ([]model.Article, error) {
 	return articles, result.Error
 }
 
+// [MODIFIED] 1. 修复 FindById：联表查询统计数据
 func (r *articleRepository) FindById(id int) (*model.Article, error) {
 	var article model.Article
-	result := r.db.First(&article, id)
-	if result.Error != nil {
-		return nil, result.Error
-	}
-	return &article, nil
+	// 核心 SQL: SELECT t_article.*, s.likes, s.hits AS views FROM t_article LEFT JOIN t_statistic s ON ...
+	err := r.db.Table("t_article").
+		Select("t_article.*, IFNULL(s.likes, 0) as likes, IFNULL(s.hits, 0) as views").
+		Joins("LEFT JOIN t_statistic s ON s.article_id = t_article.id").
+		Where("t_article.id = ?", id).
+		First(&article).Error
+	return &article, err
 }
 
 // [NEW] 实现分页查询
@@ -69,7 +81,7 @@ func (r *articleRepository) GetPage(page int, pageSize int) ([]model.Article, in
 	// 4. 再查列表 (Limit Offset)
 	// 对应 SQL: SELECT * FROM t_article ORDER BY created DESC LIMIT 10 OFFSET 0
 	result := query.Limit(pageSize).Offset(offset).Find(&articles)
-	
+
 	return articles, total, result.Error
 }
 
@@ -100,7 +112,7 @@ func (r *articleRepository) Delete(id int) error {
 // Java逻辑: select * from t_article a left join t_statistic s on a.id = s.article_id order by s.likes desc
 func (r *articleRepository) GetLikeRanking(limit int) ([]model.Article, error) {
 	var articles []model.Article
-	
+
 	// GORM 连表查询
 	// Select: 把 t_article 的字段选出来，顺便把 t_statistic 的 likes 选出来并起个别名
 	err := r.db.Table("t_article").
@@ -111,4 +123,54 @@ func (r *articleRepository) GetLikeRanking(limit int) ([]model.Article, error) {
 		Scan(&articles).Error // Scan 会自动把查出来的 likes 填入 Article 结构体的 Likes 字段(因为字段名匹配)
 
 	return articles, err
+}
+
+// 👇👇👇 追加在文件末尾 👇👇👇
+
+func (r *articleRepository) FindArticleLike(userId, articleId int) (*model.ArticleLike, error) {
+	var like model.ArticleLike
+	err := r.db.Where("user_id = ? AND article_id = ?", userId, articleId).First(&like).Error
+	return &like, err
+}
+
+func (r *articleRepository) AddArticleLike(like *model.ArticleLike) error {
+	return r.db.Create(like).Error
+}
+
+func (r *articleRepository) DeleteArticleLike(userId, articleId int) error {
+	return r.db.Where("user_id = ? AND article_id = ?", userId, articleId).Delete(&model.ArticleLike{}).Error
+}
+
+// [MODIFIED] 2. 修复 UpdateArticleLikesCount：更新 t_statistic 表
+func (r *articleRepository) UpdateArticleLikesCount(articleId int, step int) error {
+	// 先检查统计记录是否存在，不存在则创建（防止报错）
+	var count int64
+	r.db.Model(&model.Statistic{}).Where("article_id = ?", articleId).Count(&count)
+	if count == 0 {
+		r.db.Create(&model.Statistic{ArticleId: articleId, Likes: 0, Hits: 0})
+	}
+
+	// 更新 likes 字段
+	return r.db.Model(&model.Statistic{}).
+		Where("article_id = ?", articleId).
+		UpdateColumn("likes", gorm.Expr("likes + ?", step)).Error
+}
+
+// [NEW] 实现 UpdateReadCount
+func (r *articleRepository) UpdateReadCount(articleId int) error {
+	// 1. 先检查统计记录是否存在
+	var count int64
+	r.db.Model(&model.Statistic{}).Where("article_id = ?", articleId).Count(&count)
+
+	// 2. 如果不存在（比如新文章），先创建一条
+	if count == 0 {
+		// 默认 likes=0, hits=1
+		r.db.Create(&model.Statistic{ArticleId: articleId, Likes: 0, Hits: 1})
+		return nil
+	}
+
+	// 3. 存在则直接 +1
+	return r.db.Model(&model.Statistic{}).
+		Where("article_id = ?", articleId).
+		UpdateColumn("hits", gorm.Expr("hits + ?", 1)).Error
 }

@@ -2,6 +2,7 @@ package service
 
 import (
 	"errors"
+	"fmt"
 	"my-blog/internal/model"
 	"my-blog/internal/repository"
 	"my-blog/pkg/utils" // 引入我们刚写的工具包
@@ -24,20 +25,35 @@ type ArticleService interface {
 	GetAllTags() ([]model.Tag, error)
 	GetHotArticles() ([]model.Article, error)
 	GetIndexData() (*utils.Result, error) // 聚合接口
+	// [NEW] 文章点赞
+	LikeArticle(userId, articleId int) (string, error)
+	// [NEW] 核心修复：聚合接口（文章详情 + 点赞状态 + 第一页评论）
+	GetArticleAndFirstPageCommentByArticleId(articleId, userId int) (*utils.Result, error)
 }
 
 // 2. 结构体
 type articleService struct {
-	repo repository.ArticleRepository
+	repo    repository.ArticleRepository
 	tagRepo repository.TagRepository // [NEW] 引入 TagRepo
+	// [NEW] 注入通知 Repo
+	notifyRepo repository.NotificationRepository
+	// [NEW] 新增：为了获取评论列表，需要注入评论仓库
+	commentRepo repository.CommentRepository
 }
 
 // 3. 构造函数
 // [NEW] 修改构造函数，注入 tagRepo
-func NewArticleService(repo repository.ArticleRepository, tagRepo repository.TagRepository) ArticleService {
+func NewArticleService(
+	repo repository.ArticleRepository,
+	tagRepo repository.TagRepository,
+	notifyRepo repository.NotificationRepository,
+	commentRepo repository.CommentRepository, // 新增参数
+) ArticleService {
 	return &articleService{
-		repo:    repo,
-		tagRepo: tagRepo,
+		repo:        repo,
+		tagRepo:     tagRepo,
+		notifyRepo:  notifyRepo,
+		commentRepo: commentRepo,
 	}
 }
 
@@ -64,7 +80,7 @@ func (s *articleService) GetPageList(p *utils.PageParams) (*utils.Result, error)
 	res := utils.Ok()
 	res.Put("articles", articles) // 放入文章列表
 	res.Put("total", total)       // 放入总数
-	
+
 	return res, nil
 }
 
@@ -73,7 +89,7 @@ func (s *articleService) GetPageList(p *utils.PageParams) (*utils.Result, error)
 func (s *articleService) Publish(article *model.Article, isEdit bool) error {
 	// 1. 设置默认缩略图 (复刻 Java 逻辑)
 	if article.Thumbnail == "" {
-		article.Thumbnail = "/api/images/6.png" 
+		article.Thumbnail = "/api/images/6.png"
 	}
 
 	// 2. 自动填充时间
@@ -83,9 +99,9 @@ func (s *articleService) Publish(article *model.Article, isEdit bool) error {
 		article.Created = now
 		// 暂时写死 UserID，因为还没做登录
 		// 等后面做了 User 模块，这里换成从 Context 取 ID
-		article.UserId = 1 
-		article.Author = "Admin" 
-		
+		article.UserId = 1
+		article.Author = "Admin"
+
 		return s.repo.Create(article)
 	} else {
 		// 如果是编辑，设置修改时间
@@ -125,8 +141,8 @@ func (s *articleService) GetIndexData() (*utils.Result, error) {
 	for _, t := range tags {
 		tagNames = append(tagNames, t.Name)
 	}
-	res.Put("tags", tagNames)      // 简单字符串数组
-	res.Put("tagObjs", tags)       // 完整对象数组 (可选)
+	res.Put("tags", tagNames) // 简单字符串数组
+	res.Put("tagObjs", tags)  // 完整对象数组 (可选)
 
 	// 2. 获取排行
 	hotArticles, _ := s.repo.GetLikeRanking(10)
@@ -137,4 +153,83 @@ func (s *articleService) GetIndexData() (*utils.Result, error) {
 	// res.Put("latestArticles", latest)
 
 	return res, nil
+}
+
+// [核心修复] 获取文章详情及相关数据
+func (s *articleService) GetArticleAndFirstPageCommentByArticleId(articleId, userId int) (*utils.Result, error) {
+	// 1. 查文章
+	article, err := s.repo.FindById(articleId)
+	if err != nil {
+		return nil, err
+	}
+
+	// 2. 增加阅读数 (Hits)
+	// (确保你的 article_repo.go 里有 UpdateReadCount 方法)
+	s.repo.UpdateReadCount(articleId)
+
+	// 3. [关键] 填充 IsLiked 状态
+	// 如果用户登录了 (userId > 0)，去查点赞表
+	if userId > 0 {
+		like, _ := s.repo.FindArticleLike(userId, articleId)
+		if like != nil && like.Id > 0 {
+			article.IsLiked = true
+		} else {
+			article.IsLiked = false
+		}
+	}
+
+	// 4. 查第一页评论 (默认取 5 条，按最新排序)
+	// 这里调用了新注入的 commentRepo
+	comments, total, _ := s.commentRepo.GetPage(articleId, 1, 5)
+
+	// 5. 组装结果
+	res := utils.Ok()
+	res.Put("article", article)
+	res.Put("comments", comments)
+	res.Put("total", total)
+
+	return res, nil
+}
+
+// 👇👇👇 追加 LikeArticle 实现 👇👇👇
+
+func (s *articleService) LikeArticle(userId, articleId int) (string, error) {
+	// 1. 查是否点过
+	like, _ := s.repo.FindArticleLike(userId, articleId)
+
+	if like != nil && like.Id > 0 {
+		// --- 取消点赞 ---
+		s.repo.DeleteArticleLike(userId, articleId)
+		s.repo.UpdateArticleLikesCount(articleId, -1)
+		return "取消点赞", nil
+	} else {
+		// --- 新增点赞 ---
+		newLike := &model.ArticleLike{
+			UserId:    userId,
+			ArticleId: articleId,
+			Created:   time.Now(),
+		}
+		if err := s.repo.AddArticleLike(newLike); err != nil {
+			return "", err
+		}
+		s.repo.UpdateArticleLikesCount(articleId, 1)
+
+		// --- 发送通知 ---
+		go func() {
+			// 查文章作者
+			article, _ := s.repo.FindById(articleId)
+			if article != nil && article.UserId != userId {
+				notify := &model.Notification{
+					UserId:  article.UserId,
+					Content: fmt.Sprintf("点赞了你的文章: %s", article.Title),
+					Type:    "LIKE", // 通知类型
+					Status:  0,
+					Created: time.Now(),
+				}
+				s.notifyRepo.Create(notify)
+			}
+		}()
+
+		return "点赞成功", nil
+	}
 }

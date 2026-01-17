@@ -126,3 +126,44 @@ func (ctrl *CommentController) InsertReply(c *gin.Context) {
 
 	c.JSON(http.StatusOK, utils.Ok().Put("msg", "回复成功"))
 }
+
+// ... 之前的代码 ...
+
+// [POST] 评论点赞 /api/comment/likeComment
+func (ctrl *CommentController) LikeComment(c *gin.Context) {
+    commentIdStr := c.Query("commentId")
+    commentId, _ := strconv.Atoi(commentIdStr)
+    
+    // 获取当前用户ID (暂时写死1，或者从 Context 拿)
+    userId := 1 
+    
+    msg, err := ctrl.commentService.LikeComment(userId, commentId)
+    if err != nil {
+        c.JSON(http.StatusOK, utils.Error("操作失败"))
+        return
+    }
+    
+		// [FIX] 直接修改 Msg 字段，而不是用 Put
+		res := utils.Ok()
+		res.Msg = msg // 这样前端 res.data.msg 就能读到 "点赞成功" 或 "取消点赞"
+		c.JSON(http.StatusOK, res)
+}
+
+// [POST] 回复点赞 /api/reply/like
+func (ctrl *CommentController) LikeReply(c *gin.Context) {
+    replyIdStr := c.Query("replyId")
+    replyId, _ := strconv.Atoi(replyIdStr)
+    
+    userId := 1 // 暂时写死
+    
+    msg, err := ctrl.commentService.LikeReply(userId, replyId)
+    if err != nil {
+        c.JSON(http.StatusOK, utils.Error("操作失败"))
+        return
+    }
+
+		// [FIX] 同上，直接修改 Msg
+		res := utils.Ok()
+		res.Msg = msg
+		c.JSON(http.StatusOK, res)
+}

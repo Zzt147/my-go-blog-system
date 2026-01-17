@@ -6,6 +6,8 @@ import (
 
 type NotificationRepository interface {
 	GetUnreadCount(userId int) (int64, error)
+	// [NEW] 新增 Create 方法
+	Create(notify *model.Notification) error
 }
 
 type notificationRepository struct {
@@ -23,4 +25,9 @@ func (r *notificationRepository) GetUnreadCount(userId int) (int64, error) {
 		Where("user_id = ? AND status = 0", userId).
 		Count(&count).Error
 	return count, err
+}
+
+// [NEW] 实现 Create 方法
+func (r *notificationRepository) Create(notify *model.Notification) error {
+	return r.db.Create(notify).Error
 }

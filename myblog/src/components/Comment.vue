@@ -120,13 +120,20 @@ onMounted(() => {
 })
 
 // 通用的点赞函数
-function likeTargetComment(commentObj) {
+function likeTargetComment(commentObj, type) {
   if (!store.user.user) {
     ElMessage.warning("请先登录")
     return
   }
 
-  axios.post('/api/comment/likeComment?commentId=' + commentObj.id)
+  let url = ''
+  if (type === 'REPLY') {
+      url = '/api/reply/likeReply?replyId=' + commentObj.id
+  } else {
+      url = '/api/comment/likeComment?commentId=' + commentObj.id
+  }
+
+  axios.post(url)
     .then(res => {
       if (res.data.success) {
         if (!commentObj.likes) commentObj.likes = 0
@@ -167,7 +174,7 @@ function likeTargetComment(commentObj) {
           </div>
 
           <div class="actions-group">
-            <span class="action-item like-action" @click="likeTargetComment(comment)">
+            <span class="action-item like-action" @click="likeTargetComment(comment, 'COMMENT')">
               <font-awesome-icon :icon="faThumbsUp" :class="{ 'liked': comment.likes > 0 }" />
               <span class="action-text">{{ comment.likes || 0 }}</span>
             </span>
@@ -206,7 +213,7 @@ function likeTargetComment(commentObj) {
           </div>
 
           <div class="actions-group">
-            <span class="action-btn" @click="likeTargetComment(reply)" :class="{ 'liked': reply.likes > 0 }"
+            <span class="action-btn" @click="likeTargetComment(reply, 'REPLY')" :class="{ 'liked': reply.likes > 0 }"
               style="display:inline-flex; align-items:center;">
               <font-awesome-icon :icon="faThumbsUp" style="margin-right: 4px;" />
               {{ reply.likes || 0 }}

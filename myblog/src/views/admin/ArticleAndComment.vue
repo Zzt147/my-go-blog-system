@@ -48,26 +48,39 @@ const lightboxImageSrc = ref('')
 const commentTotal = ref(0) // 记录评论总数
 
 // === 文章点赞逻辑 ===
-function likeArticle() {
+// 点赞文章
+// === 文章点赞逻辑 ===
+const likeArticle = () => {
+  // 1. 登录校验
   if (!store.user.user) {
-    ElMessage.warning("请先登录！")
+    ElMessage.warning("请先登录")
     return
   }
 
-  axios.post('/api/statistic/likeArticle?articleId=' + articleAndComment.article.id)
-    .then(res => {
-      if (res.data.success) {
-        if (!articleAndComment.article.likes) articleAndComment.article.likes = 0;
+  // 2. 发送请求
+  axios.post('/api/article/likeArticle?articleId=' + articleAndComment.article.id).then(res => {
+    if (res.data.success) {
+      
+      // 初始化 likes 防止为 undefined
+      if (!articleAndComment.article.likes) articleAndComment.article.likes = 0;
 
-        if (res.data.msg === "点赞成功") {
-          articleAndComment.article.likes++;
-        } else if (res.data.msg === "取消点赞") {
-          articleAndComment.article.likes--;
+      // 3. 根据后端返回的消息更新状态
+      if (res.data.msg === '点赞成功') {
+        articleAndComment.article.likes++
+        // ✅ 核心：把 isLiked 设为 true，按钮自然会变亮
+        articleAndComment.article.isLiked = true 
+      } else if (res.data.msg === '取消点赞') {
+        if (articleAndComment.article.likes > 0) {
+          articleAndComment.article.likes--
         }
-      } else {
-        ElMessage.warning(res.data.msg);
+        // ✅ 核心：把 isLiked 设为 false，按钮自然会变灰
+        articleAndComment.article.isLiked = false 
       }
-    });
+      
+    } else {
+      ElMessage.error(res.data.msg)
+    }
+  })
 }
 // === 图片灯箱 ===
 function handleContentClick(event) {
@@ -308,7 +321,7 @@ function submit() {
   </el-row>
 
   <el-row justify="center" style="margin: 40px 0;">
-    <el-button :type="articleAndComment.article.likes > 0 ? 'primary' : 'info'" circle size="large" @click="likeArticle"
+    <el-button :type="articleAndComment.article.isLiked ? 'primary' : 'info'" circle size="large" @click="likeArticle"
       style="width: 60px; height: 60px;">
       <font-awesome-icon :icon="faThumbsUp" style="font-size: 26px;" />
     </el-button>

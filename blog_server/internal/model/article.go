@@ -20,9 +20,12 @@ type Article struct {
 	// --- 👇 下面是仅仅为了返回给前端用的“虚字段” (对应 Java 的 @TableField(exist=false)) ---
 	// gorm:"-" 表示 GORM 读写数据库时忽略它
 	// gorm:"->" 表示只读 (Scan 时可以写入，但 Save 时不保存)，这里我们用 "-" 手动填充更稳妥
-	Likes      int `gorm:"-" json:"likes"`      // 点赞数
-	Hits       int `gorm:"-" json:"hits"`       // 浏览量
+	Likes      int    `gorm:"->" json:"likes"`     // 点赞数
+	Views      int    `gorm:"->" json:"views"`     // 虚拟字段 (对应数据库的 hits)
 	AuthorName string `gorm:"-" json:"authorName"` // 作者昵称
+
+	// isLiked 是纯业务字段，数据库完全没有，还是保持 gorm:"-"
+	IsLiked bool `gorm:"-" json:"isLiked"`
 }
 
 // TableName 指定表名为 t_article

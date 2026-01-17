@@ -42,7 +42,7 @@ func (ctrl *ArticleController) Detail(c *gin.Context) {
 		c.JSON(http.StatusOK, utils.Error("文章不存在"))
 		return
 	}
-	
+
 	// 这里 key 用 "article" 对应前端
 	c.JSON(http.StatusOK, utils.Ok().Put("article", article))
 }
@@ -74,7 +74,7 @@ func (ctrl *ArticleController) Publish(c *gin.Context) {
 	// 1. 定义一个临时结构体，用来接收前端参数
 	// 前端不仅传了 article 数据， URL 上可能还带了 ?type=add
 	// 但通常 POST 请求里，type 也会放在 JSON 里，或者我们根据 ID 是否存在来判断
-	
+
 	var article model.Article
 	// 2. 将 JSON 绑定到 article 结构体
 	if err := c.ShouldBindJSON(&article); err != nil {
@@ -83,7 +83,7 @@ func (ctrl *ArticleController) Publish(c *gin.Context) {
 	}
 
 	// 3. 获取 query 参数 type (例如 /publishArticle?type=add)
-	actionType := c.Query("type") 
+	actionType := c.Query("type")
 
 	// 4. 判断是新增还是编辑
 	isEdit := false
@@ -108,17 +108,17 @@ func (ctrl *ArticleController) Delete(c *gin.Context) {
 	// 假设是 Form 表单 (POST) 里的 id
 	idStr := c.PostForm("id")
 	if idStr == "" {
-        // 如果 PostForm 没取到，试试 query param (兼容性处理)
-		idStr = c.Query("id") 
+		// 如果 PostForm 没取到，试试 query param (兼容性处理)
+		idStr = c.Query("id")
 	}
-	
+
 	id, _ := strconv.Atoi(idStr)
 
 	if err := ctrl.articleService.Delete(id); err != nil {
 		c.JSON(http.StatusOK, utils.Error("删除失败: "+err.Error()))
 		return
 	}
-	
+
 	c.JSON(http.StatusOK, utils.Ok().Put("msg", "删除成功"))
 }
 
@@ -130,17 +130,17 @@ func (ctrl *ArticleController) GetAllTags(c *gin.Context) {
 		c.JSON(http.StatusOK, utils.Error("获取标签失败"))
 		return
 	}
-	
+
 	// 兼容 Java 逻辑：前端可能只需要由名字组成的数组
 	var tagNames []string
 	for _, t := range tags {
 		tagNames = append(tagNames, t.Name)
 	}
-	
+
 	res := utils.Ok()
 	res.Put("tags", tagNames) // 对应 Java: result.getMap().put("tags", tagNames);
 	res.Put("tagObjs", tags)  // 顺便把带数量的也返回去
-	
+
 	c.JSON(http.StatusOK, res)
 }
 
@@ -157,50 +157,57 @@ func (ctrl *ArticleController) GetLikeRanking(c *gin.Context) {
 
 // [REAL] 首页聚合接口
 func (ctrl *ArticleController) GetIndexData(c *gin.Context) {
-    // 调用 Service 的聚合方法
+	// 调用 Service 的聚合方法
 	result, _ := ctrl.articleService.GetIndexData()
 	c.JSON(http.StatusOK, result)
 }
 
 // [NEW] 二合一接口：获取文章详情 + 第一页评论
 // 对应 Java: getArticleAndFirstPageCommentByArticleId
-func (ctrl *ArticleController) GetArticleAndComments(c *gin.Context) {
-	// 1. 获取 articleId (URL 参数)
+// [NEW] 对应前端的 /getArticleAndFirstPageCommentByArticleId
+func (ctrl *ArticleController) GetArticleAndFirstPageCommentByArticleId(c *gin.Context) {
+	// 1. 获取 Query 里的 articleId
 	articleIdStr := c.Query("articleId")
 	articleId, _ := strconv.Atoi(articleIdStr)
 
-	// 2. 获取分页参数 (Body JSON)
-	var pageParams utils.PageParams
-	if err := c.ShouldBindJSON(&pageParams); err != nil {
-		// 如果没传分页，默认第一页
-		pageParams = utils.PageParams{Page: 1, Rows: 10}
-	}
+	// 2. 获取 Body 里的参数 (其实 Service 层暂时写死了取第一页，但为了兼容前端传参，我们还是读一下)
+	var params utils.PageParams
+	c.ShouldBindJSON(&params)
 
-	result := utils.Ok()
+	// 3. [核心] 获取当前登录用户 ID
+	// 如果还没接 JWT，暂时写死 1。
+	// 如果接了，用 userId := c.GetInt("userId")
+	userId := 1
 
-	// 3. 并行或串行调用 Service
-	// A. 查文章
-	article, err := ctrl.articleService.GetArticleDetail(articleId)
-	if err != nil || article == nil {
-		c.JSON(http.StatusOK, utils.Error("文章不存在或已被删除"))
+	// 4. 调用我们在 Service 层写好的“超级接口”
+	// 这个接口会同时搞定：文章详情 + 是否点赞(IsLiked) + 第一页评论
+	res, err := ctrl.articleService.GetArticleAndFirstPageCommentByArticleId(articleId, userId)
+
+	if err != nil {
+		c.JSON(http.StatusOK, utils.Error(err.Error()))
 		return
 	}
-	result.Put("article", article)
 
-	// B. 查评论 (调用注入进来的 commentService)
-	// 注意：GetComments 返回的是 *Result，我们需要取出里面的 map
-	commentRes, err := ctrl.commentService.GetComments(articleId, &pageParams)
-	if err == nil && commentRes.Success {
-		result.Put("comments", commentRes.Map["comments"])
-		result.Put("total", commentRes.Map["total"])
-		// 如果前端需要 pageParams 回传
-		pageParams.Total = commentRes.Map["total"].(int64)
-		result.Put("pageParams", pageParams)
-	} else {
-		// 即使评论挂了，文章也该显示，给个空列表
-		result.Put("comments", []interface{}{})
-		result.Put("total", 0)
+	c.JSON(http.StatusOK, res)
+}
+
+// [POST] 文章点赞 /api/article/likeArticle
+func (ctrl *ArticleController) LikeArticle(c *gin.Context) {
+	// 获取 articleId
+	articleIdStr := c.Query("articleId")
+	articleId, _ := strconv.Atoi(articleIdStr)
+
+	// 获取 userId (暂时写死，后续接 JWT)
+	userId := 1
+
+	msg, err := ctrl.articleService.LikeArticle(userId, articleId)
+	if err != nil {
+		c.JSON(http.StatusOK, utils.Error("操作失败"))
+		return
 	}
 
-	c.JSON(http.StatusOK, result)
+	// [IMPORTANT] 记得像评论点赞一样，直接覆盖 Msg
+	res := utils.Ok()
+	res.Msg = msg
+	c.JSON(http.StatusOK, res)
 }
