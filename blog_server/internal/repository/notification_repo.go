@@ -44,7 +44,7 @@ func (r *notificationRepository) GetPage(receiverId, page, rows int) ([]*model.N
 	// status=0 是未读，status=1 是已读。我们希望未读在上面 -> Asc排序即可(0在1前)
 	// 或者直接按 Created desc
 	err := query.
-		Order("status asc").   // 未读在前
+		Order("status asc"). // 未读在前
 		Order("created desc"). // 新的在前
 		Limit(rows).Offset(offset).
 		Find(&list).Error
@@ -72,6 +72,6 @@ func (r *notificationRepository) UpdateStatus(id int, status int) error {
 // 标记全部已读
 func (r *notificationRepository) MarkAllRead(receiverId int) error {
 	return r.db.Model(&model.Notification{}).
-		Where("user_id = ? AND status = ?", receiverId, 0).
+		Where("receiver_id = ? AND status = ?", receiverId, 0).
 		Update("status", 1).Error
 }
