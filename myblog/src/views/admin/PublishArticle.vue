@@ -274,7 +274,7 @@ async function publishArticle() {
     // 成功后的处理：先清理数据，再显示成功消息
     clearAllData()
 
-    ElMessageBox.alert(response.data, '结果', {
+    ElMessageBox.alert(response.data.msg, '结果', {
       confirmButtonText: '确定',
       callback: () => {
         // 确定后的回调：再次清理确保数据消失

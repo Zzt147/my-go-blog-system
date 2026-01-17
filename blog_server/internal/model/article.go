@@ -4,18 +4,18 @@ import "time"
 
 // Article 对应数据库 t_article 表
 type Article struct {
-	Id           int       `gorm:"primaryKey;autoIncrement" json:"id"`
-	Title        string    `gorm:"column:title" json:"title"`
-	Author       string    `gorm:"column:author" json:"author"`
-	Content      string    `gorm:"column:content" json:"content"`
-	Created      time.Time `gorm:"column:created" json:"created"`
-	Modified     time.Time `gorm:"column:modified" json:"modified"`
-	Categories   string    `gorm:"column:categories" json:"categories"` // 对应 varchar
-	Tags         string    `gorm:"column:tags" json:"tags"`
-	AllowComment int       `gorm:"column:allow_comment" json:"allowComment"` // tinyint(1) 建议用 int 或 bool
-	Thumbnail    string    `gorm:"column:thumbnail" json:"thumbnail"`
-	UserId       int       `gorm:"column:user_id" json:"userId"`
-	Location     string    `gorm:"column:location" json:"location"`
+	Id           int        `gorm:"primaryKey;autoIncrement" json:"id"`
+	Title        string     `gorm:"column:title" json:"title"`
+	Author       string     `gorm:"column:author" json:"author"`
+	Content      string     `gorm:"column:content" json:"content"`
+	Created      time.Time  `gorm:"column:created" json:"created"`
+	Modified     *time.Time `gorm:"column:modified" json:"modified"`
+	Categories   string     `gorm:"column:categories" json:"categories"` // 对应 varchar
+	Tags         string     `gorm:"column:tags" json:"tags"`
+	AllowComment int        `gorm:"column:allow_comment" json:"allowComment"` // tinyint(1) 建议用 int 或 bool
+	Thumbnail    string     `gorm:"column:thumbnail" json:"thumbnail"`
+	UserId       int        `gorm:"column:user_id" json:"userId"`
+	Location     string     `gorm:"column:location" json:"location"`
 
 	// --- 👇 下面是仅仅为了返回给前端用的“虚字段” (对应 Java 的 @TableField(exist=false)) ---
 	// gorm:"-" 表示 GORM 读写数据库时忽略它

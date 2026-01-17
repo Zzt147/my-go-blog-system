@@ -98,7 +98,9 @@ func (ctrl *ArticleController) Publish(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, utils.Ok().Put("msg", "操作成功！"))
+	res := utils.Ok()
+	res.Msg = "操作成功！"
+	c.JSON(http.StatusOK, res)
 }
 
 // [NEW] 删除文章接口

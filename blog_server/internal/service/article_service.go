@@ -87,6 +87,15 @@ func (s *articleService) GetPageList(p *utils.PageParams) (*utils.Result, error)
 // [NEW] 实现 Publish
 // 参数说明：isEdit=true 代表是编辑，false 代表是新增
 func (s *articleService) Publish(article *model.Article, isEdit bool) error {
+	// 🔴 [新增校验] 必须要有标题
+	if article.Title == "" {
+		return errors.New("文章标题不能为空")
+	}
+	// (可选) 如果你也想校验内容，可以把下面这行解开
+	if article.Content == "" {
+		return errors.New("文章内容不能为空")
+	}
+
 	// 1. 设置默认缩略图 (复刻 Java 逻辑)
 	if article.Thumbnail == "" {
 		article.Thumbnail = "/api/images/6.png"
@@ -105,7 +114,7 @@ func (s *articleService) Publish(article *model.Article, isEdit bool) error {
 		return s.repo.Create(article)
 	} else {
 		// 如果是编辑，设置修改时间
-		article.Modified = now
+		article.Modified = &now
 		return s.repo.Update(article)
 	}
 }
