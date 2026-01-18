@@ -53,33 +53,47 @@ const toggleMode = () => {
 }
 
 // 刷新验证码
+// [MODIFY] 修改验证码刷新逻辑，适配 Go 后端的 JSON 响应
+// [MODIFY] 替换原有的 refreshResetCaptcha 函数
 const refreshResetCaptcha = () => {
   const key = new Date().getTime().toString()
   resetForm.captchaKey = key
-  resetCaptchaUrl.value = `/api/user/captcha?key=${key}`
+  
+  // [核心修改] 使用 axios 获取 JSON 格式的验证码
+  axios.get(`/api/user/captcha?key=${key}`).then(res => {
+    if (res.data && res.data.img) {
+      // Go 后端返回的是 { img: "base64...", key: "..." }
+      resetCaptchaUrl.value = res.data.img
+    }
+  }).catch(err => {
+    console.error(err)
+    ElMessage.error("验证码加载失败")
+  })
 }
 
 // 发送邮件验证码
+// [MODIFY] 2. 发送邮件验证码 (严格保留你的函数名 sendResetCode)
 const sendResetCode = async () => {
-  if (!resetForm.username) return ElMessage.warning('请先输入用户名')
-  if (!resetForm.email) return ElMessage.warning('请先输入邮箱')
-  if (!resetForm.captcha) return ElMessage.warning('请先输入图形验证码')
-
-  if (isSending.value) return
-  isSending.value = true
+  if (!resetForm.username) return ElMessage.warning('请输入用户名')
+  if (!resetForm.email) return ElMessage.warning('请输入邮箱')
+  if (!resetForm.captcha) return ElMessage.warning('请输入图形验证码')
 
   try {
+    // 核心修改：Go 后端 SendEmailCode 接收的是 PostForm (x-www-form-urlencoded)
+    // 所以必须用 URLSearchParams 包装，不能传 JSON 对象
     const params = new URLSearchParams()
     params.append('email', resetForm.email)
     params.append('captcha', resetForm.captcha)
     params.append('captchaKey', resetForm.captchaKey)
-    params.append('type', 'reset')
-    params.append('username', resetForm.username) // 关键：带上用户名
+    params.append('type', 'reset') 
+    params.append('username', resetForm.username)
 
     const res = await axios.post('/api/user/sendEmailCode', params)
-
+    
     if (res.data.success) {
-      ElMessage.success('验证码已发送')
+      ElMessage.success(res.data.map.msg || '验证码已发送')
+      // 倒计时逻辑
+      isSending.value = true
       countdown.value = 60
       timer = setInterval(() => {
         countdown.value--
@@ -90,36 +104,42 @@ const sendResetCode = async () => {
       }, 1000)
     } else {
       ElMessage.error(res.data.msg || '发送失败')
-      isSending.value = false
-      refreshResetCaptcha()
+      refreshResetCaptcha() // 失败自动刷新验证码
     }
-  } catch (err) {
-    ElMessage.error('请求失败')
-    isSending.value = false
+  } catch (error) {
+    console.error(error)
+    ElMessage.error('发送请求失败')
   }
 }
 
 // 提交重置密码
+// [MODIFY] 3. 提交重置密码 (严格保留你的函数名 handleResetPassword)
 const handleResetPassword = async () => {
-  if (!resetForm.newPassword || !resetForm.code || !resetForm.username) {
+  // 1. 前端校验
+  if (!resetForm.username || !resetForm.email || !resetForm.code || !resetForm.newPassword) {
     return ElMessage.warning('请补全信息')
   }
 
   try {
+    // 2. 发送请求 (Go 后端 ResetPassword 接口接收的是 JSON)
     const res = await axios.post('/api/user/resetPassword', {
       username: resetForm.username,
       email: resetForm.email,
       code: resetForm.code,
-      password: resetForm.newPassword
+      password: resetForm.newPassword // 注意：后端 DTO 里的字段叫 password，前端这里对应 newPassword
     })
 
+    // 3. 处理结果
     if (res.data.success) {
       ElMessage.success('密码重置成功，请登录')
-      toggleMode() // 切回登录
+      toggleMode() // 切回登录模式
+      // 贴心优化：自动填入用户名
+      loginForm.username = resetForm.username
     } else {
-      ElMessage.error(res.data.msg)
+      ElMessage.error(res.data.msg || '重置失败')
     }
   } catch (err) {
+    console.error(err)
     ElMessage.error('重置请求失败')
   }
 }

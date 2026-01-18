@@ -25,10 +25,26 @@ const captchaUrl = ref('')
 const countdown = ref(0)
 let timer = null
 
+// [MODIFY] 修改验证码刷新逻辑，适配 Go 后端的 JSON 响应
 const refreshCaptcha = () => {
+  // 1. 生成一个临时的 key (保持原有逻辑，用于传给后端作为 Redis 的 key)
   const key = new Date().getTime().toString()
+  
+  // 2. 将 key 存入表单，以便注册时提交给后端校验
   registerForm.captchaKey = key
-  captchaUrl.value = `/api/user/captcha?key=${key}`
+
+  // 3. [核心修改] 使用 axios 发起请求，而不是直接赋值 URL
+  // 因为 Go 后端现在返回的是 JSON: { "img": "data:image/png;base64,...", "key": "..." }
+  axios.get(`/api/user/captcha?key=${key}`).then(res => {
+    // 确保返回的数据里有 img 字段
+    if (res.data && res.data.img) {
+      // 4. 将 Base64 字符串直接赋值给 src 绑定的变量
+      captchaUrl.value = res.data.img
+    }
+  }).catch(err => {
+    console.error("验证码加载失败:", err)
+    ElMessage.error("验证码加载失败")
+  })
 }
 
 onMounted(() => refreshCaptcha())

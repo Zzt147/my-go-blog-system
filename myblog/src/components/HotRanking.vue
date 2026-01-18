@@ -76,7 +76,7 @@ function gotoArticle(article) {
               <template v-if="currentTab === 'read'">
                 <el-icon>
                   <View />
-                </el-icon> {{ article.hits || 0 }}
+                </el-icon> {{ article.views || 0 }}
               </template>
               <template v-else>
                 <font-awesome-icon :icon="faThumbsUp" /> {{ article.likes || 0 }}

@@ -213,3 +213,39 @@ func (ctrl *ArticleController) LikeArticle(c *gin.Context) {
 	res.Msg = msg
 	c.JSON(http.StatusOK, res)
 }
+
+// [NEW] 获取阅读排行接口
+// 对应 Java: @GetMapping("/getReadRanking")
+func (ctrl *ArticleController) GetReadRanking(c *gin.Context) {
+	articles, err := ctrl.articleService.GetReadRanking()
+	if err != nil {
+		c.JSON(http.StatusOK, utils.Error("获取阅读排行失败"))
+		return
+	}
+	// Java 代码返回 key 为 "articleVOs"
+	c.JSON(http.StatusOK, utils.Ok().Put("articleVOs", articles))
+}
+
+// [NEW] 文章搜索接口 (按标签)
+// 对应 Java: @PostMapping("/articleSearch")
+func (ctrl *ArticleController) ArticleSearch(c *gin.Context) {
+	// 定义请求参数结构体，匹配前端 JSON 结构
+	// 前端传参: { "pageParams": {...}, "articleCondition": {...} }
+	var req struct {
+		PageParams       utils.PageParams       `json:"pageParams"`
+		ArticleCondition model.ArticleCondition `json:"articleCondition"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusOK, utils.Error("参数格式错误"))
+		return
+	}
+
+	result, err := ctrl.articleService.Search(&req.PageParams, &req.ArticleCondition)
+	if err != nil {
+		c.JSON(http.StatusOK, utils.Error("查询失败: "+err.Error()))
+		return
+	}
+
+	c.JSON(http.StatusOK, result)
+}

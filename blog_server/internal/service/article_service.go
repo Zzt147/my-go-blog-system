@@ -29,6 +29,12 @@ type ArticleService interface {
 	LikeArticle(userId, articleId int) (string, error)
 	// [NEW] 核心修复：聚合接口（文章详情 + 点赞状态 + 第一页评论）
 	GetArticleAndFirstPageCommentByArticleId(articleId, userId int) (*utils.Result, error)
+
+	// [NEW] 获取阅读排行
+	GetReadRanking() ([]model.Article, error)
+
+	// [NEW] 文章搜索
+	Search(pageParams *utils.PageParams, articleCondition *model.ArticleCondition) (*utils.Result, error)
 }
 
 // 2. 结构体
@@ -241,4 +247,24 @@ func (s *articleService) LikeArticle(userId, articleId int) (string, error) {
 
 		return "点赞成功", nil
 	}
+}
+
+// [NEW] 实现 GetReadRanking
+func (s *articleService) GetReadRanking() ([]model.Article, error) {
+	// 获取阅读排行 (Top 10)
+	return s.repo.GetReadRanking(10)
+}
+
+// [NEW] 实现 Search (对应 Java 的 search 方法)
+func (s *articleService) Search(p *utils.PageParams, condition *model.ArticleCondition) (*utils.Result, error) {
+	// 调用 Repo 进行搜索
+	articles, total, err := s.repo.Search(p.Page, p.Rows, condition)
+	if err != nil {
+		return nil, err
+	}
+
+	res := utils.Ok()
+	res.Put("articles", articles)
+	res.Put("total", total)
+	return res, nil
 }

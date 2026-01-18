@@ -29,6 +29,12 @@ type ArticleRepository interface {
 
 	// [NEW] 新增：更新阅读量
 	UpdateReadCount(articleId int) error
+
+	// [NEW] 获取阅读排行 (按 hits 倒序)
+	GetReadRanking(limit int) ([]model.Article, error)
+
+	// [NEW] 文章搜索 (支持按标签筛选)
+	Search(page, pageSize int, condition *model.ArticleCondition) ([]model.Article, int64, error)
 }
 
 // 2. 结构体实现
@@ -173,4 +179,57 @@ func (r *articleRepository) UpdateReadCount(articleId int) error {
 	return r.db.Model(&model.Statistic{}).
 		Where("article_id = ?", articleId).
 		UpdateColumn("hits", gorm.Expr("hits + ?", 1)).Error
+}
+
+// [NEW] 获取阅读排行实现
+// Java逻辑: select ... order by s.hits desc
+// [MODIFY] 获取阅读排行实现 (修复 views 为 0 的问题)
+func (r *articleRepository) GetReadRanking(limit int) ([]model.Article, error) {
+	var articles []model.Article
+
+	// 关键修改：t_statistic.hits AS views
+	// 这样 GORM 才能把 hits 的值赋给结构体里的 Views 字段
+	err := r.db.Table("t_article").
+		Select("t_article.*, t_statistic.likes, t_statistic.hits AS views").
+		Joins("LEFT JOIN t_statistic ON t_article.id = t_statistic.article_id").
+		Order("t_statistic.hits DESC").
+		Limit(limit).
+		Scan(&articles).Error
+
+	return articles, err
+}
+
+// [NEW] 文章搜索实现
+func (r *articleRepository) Search(page, pageSize int, condition *model.ArticleCondition) ([]model.Article, int64, error) {
+	var articles []model.Article
+	var total int64
+	offset := (page - 1) * pageSize
+
+	// 构造基础查询
+	// 关键修改1：使用 Table 而不是 Model，以便进行 Join 操作
+	// 关键修改2：Select 中增加 AS views，确保列表页也能显示阅读量
+	query := r.db.Table("t_article").
+		Select("t_article.*, t_statistic.likes, t_statistic.hits AS views").
+		Joins("LEFT JOIN t_statistic ON t_article.id = t_statistic.article_id").
+		Order("t_article.created desc")
+
+	// 动态 SQL (对应 Java queryWrapper)
+	if condition != nil {
+		if condition.Tag != "" {
+			// 注意：这里需要明确指定表名 t_article.tags，避免字段歧义（如果有的话）
+			query = query.Where("t_article.tags LIKE ?", "%"+condition.Tag+"%")
+		}
+		// 这里预留了 CategoryId, Title 等扩展位置，严格遵循 Java ArticleCondition
+	}
+
+	// 查总数
+	// 查总数 (Count 时尽量移除 Select 和 Order 以提高性能，但 GORM 的 Count 会自动处理)
+	// 注意：对于连表查询的 Count，GORM 通常能处理，但为了稳健，直接对 query 计数
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	// 查列表
+	result := query.Limit(pageSize).Offset(offset).Find(&articles)
+	return articles, total, result.Error
 }

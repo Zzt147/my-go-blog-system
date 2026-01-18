@@ -1,8 +1,6 @@
 <script setup>
 import Top from '@/components/Top.vue'
 import ArticleHeader from "@/components/ArticleHeader.vue";
-import ReadRanking from '../components/ReadRanking.vue';
-import LikeRanking from '../components/LikeRanking.vue';
 import { ElMessageBox, ElMessage } from 'element-plus';
 import { reactive, inject, ref, computed } from 'vue'
 import { onBeforeRouteLeave } from 'vue-router';
@@ -54,9 +52,10 @@ function init() {
   // 为了保证 sort 生效，我们这里手动调用一次 getAPage 来获取文章列表， separate rankings fetch
 
   // 1. 获取排行榜和标签 (这些不需要频繁刷新)
-  axios.post("/api/article/getIndexData1", data.pageParams).then(res => {
+// [NEW] 使用新的独立接口获取阅读排行 (严格对应后端 /api/article/getReadRanking)
+  axios.get("/api/article/getReadRanking").then(res => {
     if (res.data.success) {
-      // 这里只取排行榜，文章列表由 getAPage 接管以支持排序
+      // 后端返回结构: utils.Ok().Put("articleVOs", articles)
       data.rankingList = res.data.map.articleVOs || [];
     }
   });

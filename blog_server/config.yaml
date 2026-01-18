@@ -1,0 +1,21 @@
+server:
+  port: ":8080"
+
+database:
+  dsn: "root:57502@tcp(127.0.0.1:3306)/my_blog_system?charset=utf8mb4&parseTime=True&loc=Local"
+
+redis:
+  addr: "127.0.0.1:6379"
+  password: ""
+  db: 0
+
+mail:
+  host: "smtp.qq.com"
+  port: 465
+  username: "2765309445@qq.com"
+  password: "crjtfyyrvnygddbh" # 你的授权码
+
+file:
+  upload_images_dir: "E:/img/images"
+  upload_avatar_dir: "D:/my_blog_upload"
+  article_img_dir: "E:/img/article_img"

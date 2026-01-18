@@ -28,6 +28,14 @@ type Article struct {
 	IsLiked bool `gorm:"-" json:"isLiked"`
 }
 
+// [NEW] 文章查询条件 (对应 Java 的 ArticleCondition)
+type ArticleCondition struct {
+	Tag        string `json:"tag"`
+	CategoryId int    `json:"categoryId"`
+	Title      string `json:"title"`
+	Content    string `json:"content"`
+}
+
 // TableName 指定表名为 t_article
 func (Article) TableName() string {
 	return "t_article"

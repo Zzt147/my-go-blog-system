@@ -20,6 +20,14 @@ func InitRouter() *gin.Engine {
 	r.Use(middleware.Cors())
 
 	// ==========================================
+	// 2. [MODIFY] 静态资源映射 (修复硬编码)
+	// ==========================================
+	// 确保 Config 已初始化
+	if config.Config.File.UploadImagesDir == "" {
+		config.InitConfig()
+	}
+
+	// ==========================================
 	// 2. 静态资源映射 (对应 Java WebConfig)
 	// ==========================================
 	// 头像/上传文件夹
@@ -48,7 +56,10 @@ func InitRouter() *gin.Engine {
 	replyRepo := repository.NewReplyRepository(db) // [NEW] 独立
 
 	// --- Service 层 (业务逻辑) ---
-	userSvc := service.NewUserService(userRepo)
+	// [NEW] Service (新增 MailService)
+	mailSvc := service.NewMailService()
+	// [MODIFY] UserService 注入 MailService
+	userSvc := service.NewUserService(userRepo, mailSvc)
 	// [NEW] ArticleService 现在需要注入两个 Repo (Article + Tag)
 	// 🔴 [MODIFIED] 这里必须传入 notifyRepo
 	articleSvc := service.NewArticleService(articleRepo, tagRepo, notifyRepo, commentRepo)
@@ -91,7 +102,8 @@ func InitRouter() *gin.Engine {
 		apiGroup.GET("/user/captcha", userCtrl.Captcha)              // 图形验证码
 		apiGroup.POST("/user/sendEmailCode", userCtrl.SendEmailCode) // 发送邮件验证码
 		apiGroup.POST("/user/register", userCtrl.Register)           // 注册
-
+		// [NEW] 重置密码
+		apiGroup.POST("/user/resetPassword", userCtrl.ResetPassword)
 		// ----------------------------------
 		// 文件模块 (File)
 		// ----------------------------------
@@ -106,6 +118,12 @@ func InitRouter() *gin.Engine {
 		apiGroup.POST("/article/getIndexData1", articleCtrl.GetIndexData)   // 首页聚合数据 (Tags + Hot + Latest)
 		apiGroup.GET("/article/getAllTags", articleCtrl.GetAllTags)         // 标签云
 		apiGroup.GET("/article/getLikeRanking", articleCtrl.GetLikeRanking) // 阅读/点赞排行
+
+		// [NEW] 阅读排行接口
+		apiGroup.GET("/article/getReadRanking", articleCtrl.GetReadRanking)
+
+		// [NEW] 文章搜索接口 (标签筛选)
+		apiGroup.POST("/article/articleSearch", articleCtrl.ArticleSearch)
 
 		// [NEW] 二合一接口 (修复 404)
 		apiGroup.POST("/article/getArticleAndFirstPageCommentByArticleId", articleCtrl.GetArticleAndFirstPageCommentByArticleId)
