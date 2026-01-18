@@ -11,12 +11,8 @@ import (
 type CommentService interface {
 	GetComments(articleId int, pageParams *utils.PageParams) (*utils.Result, error)
 	AddComment(comment *model.Comment) error
-	GetReplies(commentId int) ([]model.Reply, error)
-	AddReply(reply *model.Reply) error
-
 	// [NEW] 点赞
 	LikeComment(userId, commentId int) (string, error) // 返回 "点赞成功" 或 "取消点赞"
-	LikeReply(userId, replyId int) (string, error)
 }
 
 type commentService struct {
@@ -26,6 +22,8 @@ type commentService struct {
 	// [NEW] 注入通知服务和文章Repo (为了查文章作者)
 	notifyRepo  repository.NotificationRepository
 	articleRepo repository.ArticleRepository
+
+	replyRepo repository.ReplyRepository
 }
 
 // [MODIFIED] 修改构造函数，注入新的依赖
@@ -33,13 +31,15 @@ func NewCommentService(
 	repo repository.CommentRepository,
 	userRepo repository.UserRepository,
 	notifyRepo repository.NotificationRepository, // 新增
-	articleRepo repository.ArticleRepository, // 新增
+	articleRepo repository.ArticleRepository,     // 新增
+	replyRepo repository.ReplyRepository,
 ) CommentService {
 	return &commentService{
 		repo:        repo,
 		userRepo:    userRepo,
 		notifyRepo:  notifyRepo,
 		articleRepo: articleRepo,
+		replyRepo:   replyRepo,
 	}
 }
 
@@ -126,98 +126,6 @@ func (s *commentService) AddComment(comment *model.Comment) error {
 
 }
 
-// 获取回复
-func (s *commentService) GetReplies(commentId int) ([]model.Reply, error) {
-	replies, err := s.repo.GetRepliesByCommentId(commentId)
-	if err != nil {
-		return nil, err
-	}
-
-	for i := range replies {
-		// 1. 补全回复者信息
-		u1, _ := s.userRepo.FindById(replies[i].UserId)
-		if u1 != nil {
-			u1.Password = ""
-			replies[i].User = u1
-
-			// [FIX] 确保数据库里的 Author 字段有值
-			if replies[i].Author == "" {
-				replies[i].Author = u1.Username
-			}
-			// [FIX] 前端也可能用 username 字段，为了双重保险
-			replies[i].Username = u1.Username
-		}
-
-		// 2. 补全被回复者信息 (TargetName)
-		if replies[i].ToUid != 0 {
-			u2, _ := s.userRepo.FindById(replies[i].ToUid)
-			if u2 != nil {
-				u2.Password = ""
-				replies[i].TargetUser = u2
-				// [FIX] 填充 targetName
-				replies[i].TargetAuthor = u2.Username
-			}
-		} else {
-			// 如果是回复层主，TargetAuthor 可能是空的，这没关系
-		}
-	}
-	return replies, nil
-}
-
-// 发表回复 (复刻 Java 逻辑：根据 UserId 查 Author 名字)
-func (s *commentService) AddReply(reply *model.Reply) error {
-	reply.Created = time.Now()
-	reply.Likes = 0
-
-	// 1. 根据 UserId 查 Author 名字 (因为前端传的是 ID)
-	if reply.UserId != 0 {
-		user, err := s.userRepo.FindById(reply.UserId)
-		if err == nil && user != nil {
-			reply.Author = user.Username
-		}
-	}
-
-	// 2. 根据 ToUid 查 TargetAuthor 名字 (回复给谁)
-	if reply.ToUid != 0 {
-		targetUser, err := s.userRepo.FindById(reply.ToUid)
-		if err == nil && targetUser != nil {
-			reply.TargetAuthor = targetUser.Username
-		}
-	}
-
-	reply.Created = time.Now()
-
-	// 1. 存回复
-	if err := s.repo.CreateReply(reply); err != nil {
-		return err
-	}
-
-	// 2. [NEW] 发送通知
-	go func() {
-		// 确定接收者：如果有 ToUid (回复某人)，发给他；否则发给层主 (暂时没办法直接查层主ID，除非再查一遍 Comment)
-		receiverId := reply.ToUid
-		// 如果没有指定回复谁，默认回复层主，这里为了简单先只处理 ToUid 存在的场景
-		// 或者你需要再查一下 Comment 表拿到 comment.UserId
-
-		if receiverId != 0 && receiverId != reply.UserId {
-			notify := &model.Notification{
-				ReceiverId: reply.UserId,
-				SenderId:   reply.UserId, // ✅ 必须填
-				SenderName: reply.Author, // ✅ 必须填
-				// ArticleId:  reply.ArticleId,                               // 这个得根据回复表里的comment_id去对应的comment表找文章id
-				CommentId: reply.Id,                                         // ✅ 必须填
-				Content:   "回复了你的评论: " + utils.SubString(reply.Content, 20), // 截取前20字
-				Type:      "REPLY",
-				Status:    0,
-				Created:   time.Now(),
-			}
-			s.notifyRepo.Create(notify)
-		}
-	}()
-
-	return nil
-}
-
 // [NEW] 实现评论点赞
 func (s *commentService) LikeComment(userId, commentId int) (string, error) {
 	// 1. 查是否点过
@@ -237,26 +145,6 @@ func (s *commentService) LikeComment(userId, commentId int) (string, error) {
 		}
 		s.repo.AddCommentLike(newLike)
 		s.repo.UpdateCommentLikesCount(commentId, 1)
-		return "点赞成功", nil
-	}
-}
-
-// [NEW] 实现回复点赞
-func (s *commentService) LikeReply(userId, replyId int) (string, error) {
-	like, _ := s.repo.FindReplyLike(userId, replyId)
-
-	if like != nil && like.Id > 0 {
-		s.repo.DeleteReplyLike(userId, replyId)
-		s.repo.UpdateReplyLikesCount(replyId, -1)
-		return "取消点赞", nil
-	} else {
-		newLike := &model.ReplyLike{
-			UserId:  userId,
-			ReplyId: replyId,
-			Created: time.Now(),
-		}
-		s.repo.AddReplyLike(newLike)
-		s.repo.UpdateReplyLikesCount(replyId, 1)
 		return "点赞成功", nil
 	}
 }

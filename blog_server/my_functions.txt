@@ -1,0 +1,126 @@
+(Article) TableName() string {
+(ArticleLike) TableName() string {
+(Comment) TableName() string {
+(CommentLike) TableName() string {
+(Notification) TableName() string {
+(Reply) TableName() string {
+(ReplyLike) TableName() string {
+(Statistic) TableName() string {
+(Tag) TableName() string {
+(User) TableName() string {
+(ctrl *ArticleController) Delete(c *gin.Context) {
+(ctrl *ArticleController) Detail(c *gin.Context) {
+(ctrl *ArticleController) GetAllTags(c *gin.Context) {
+(ctrl *ArticleController) GetArticleAndFirstPageCommentByArticleId(c *gin.Context) {
+(ctrl *ArticleController) GetIndexData(c *gin.Context) {
+(ctrl *ArticleController) GetLikeRanking(c *gin.Context) {
+(ctrl *ArticleController) GetPage(c *gin.Context) {
+(ctrl *ArticleController) LikeArticle(c *gin.Context) {
+(ctrl *ArticleController) List(c *gin.Context) {
+(ctrl *ArticleController) Publish(c *gin.Context) {
+(ctrl *CommentController) GetComments(c *gin.Context) {
+(ctrl *CommentController) GetReplies(c *gin.Context) {
+(ctrl *CommentController) InsertComment(c *gin.Context) {
+(ctrl *CommentController) InsertReply(c *gin.Context) {
+(ctrl *CommentController) LikeComment(c *gin.Context) {
+(ctrl *CommentController) LikeReply(c *gin.Context) {
+(ctrl *NotificationController) GetPage(c *gin.Context) {
+(ctrl *NotificationController) GetUnreadCount(c *gin.Context) {
+(ctrl *NotificationController) Read(c *gin.Context) {
+(ctrl *NotificationController) ReadAll(c *gin.Context) {
+(ctrl *UserController) Captcha(c *gin.Context) {
+(ctrl *UserController) CurrentUser(c *gin.Context) {
+(ctrl *UserController) GetUser(c *gin.Context) {
+(ctrl *UserController) ListUsers(c *gin.Context) {
+(ctrl *UserController) Login(c *gin.Context) {
+(ctrl *UserController) Logout(c *gin.Context) {
+(ctrl *UserController) Register(c *gin.Context) {
+(ctrl *UserController) SendEmailCode(c *gin.Context) {
+(f *FileController) Upload(c *gin.Context) {
+(p *PageParams) GetOffset() int {
+(r *Result) Put(key string, value interface{}) *Result {
+(r *articleRepository) AddArticleLike(like *model.ArticleLike) error {
+(r *articleRepository) Create(article *model.Article) error {
+(r *articleRepository) Delete(id int) error {
+(r *articleRepository) DeleteArticleLike(userId, articleId int) error {
+(r *articleRepository) FindAll() ([]model.Article, error) {
+(r *articleRepository) FindArticleLike(userId, articleId int) (*model.ArticleLike, error) {
+(r *articleRepository) FindById(id int) (*model.Article, error) {
+(r *articleRepository) GetLikeRanking(limit int) ([]model.Article, error) {
+(r *articleRepository) GetPage(page int, pageSize int) ([]model.Article, int64, error) {
+(r *articleRepository) Update(article *model.Article) error {
+(r *articleRepository) UpdateArticleLikesCount(articleId int, step int) error {
+(r *articleRepository) UpdateReadCount(articleId int) error {
+(r *commentRepository) AddCommentLike(like *model.CommentLike) error {
+(r *commentRepository) AddReplyLike(like *model.ReplyLike) error {
+(r *commentRepository) Create(comment *model.Comment) error {
+(r *commentRepository) CreateReply(reply *model.Reply) error {
+(r *commentRepository) DeleteCommentLike(userId, commentId int) error {
+(r *commentRepository) DeleteReplyLike(userId, replyId int) error {
+(r *commentRepository) FindCommentLike(userId, commentId int) (*model.CommentLike, error) {
+(r *commentRepository) FindReplyLike(userId, replyId int) (*model.ReplyLike, error) {
+(r *commentRepository) GetPage(articleId, page, rows int) ([]*model.Comment, int64, error) {
+(r *commentRepository) GetPageByArticleId(articleId int, page int, pageSize int) ([]model.Comment, int64, error) {
+(r *commentRepository) GetRepliesByCommentId(commentId int) ([]model.Reply, error) {
+(r *commentRepository) UpdateArticleCommentCount(articleId int, step int) error {
+(r *commentRepository) UpdateCommentLikesCount(commentId int, step int) error {
+(r *commentRepository) UpdateReplyLikesCount(replyId int, step int) error {
+(r *notificationRepository) Create(notify *model.Notification) error {
+(r *notificationRepository) GetPage(receiverId, page, rows int) ([]*model.Notification, int64, error) {
+(r *notificationRepository) GetUnreadCount(receiverId int) (int64, error) {
+(r *notificationRepository) MarkAllRead(receiverId int) error {
+(r *notificationRepository) UpdateStatus(id int, status int) error {
+(r *tagRepository) GetAllTags() ([]model.Tag, error) {
+(r *tagRepository) GetHotTags(limit int) ([]model.Tag, error) {
+(r *userRepository) Create(user *model.User) error {
+(r *userRepository) FindAll() ([]model.User, error) {
+(r *userRepository) FindByEmail(email string) (*model.User, error) {
+(r *userRepository) FindById(id int) (*model.User, error) {
+(r *userRepository) FindByUsername(username string) (*model.User, error) {
+(s *articleService) Delete(id int) error {
+(s *articleService) GetAllTags() ([]model.Tag, error) {
+(s *articleService) GetArticleAndFirstPageCommentByArticleId(articleId, userId int) (*utils.Result, error) {
+(s *articleService) GetArticleDetail(id int) (*model.Article, error) {
+(s *articleService) GetArticleList() ([]model.Article, error) {
+(s *articleService) GetHotArticles() ([]model.Article, error) {
+(s *articleService) GetIndexData() (*utils.Result, error) {
+(s *articleService) GetPageList(p *utils.PageParams) (*utils.Result, error) {
+(s *articleService) LikeArticle(userId, articleId int) (string, error) {
+(s *articleService) Publish(article *model.Article, isEdit bool) error {
+(s *commentService) AddComment(comment *model.Comment) error {
+(s *commentService) AddReply(reply *model.Reply) error {
+(s *commentService) GetComments(articleId int, p *utils.PageParams) (*utils.Result, error) {
+(s *commentService) GetReplies(commentId int) ([]model.Reply, error) {
+(s *commentService) LikeComment(userId, commentId int) (string, error) {
+(s *commentService) LikeReply(userId, replyId int) (string, error) {
+(s *notificationService) GetPage(userId, page, rows int) (*utils.Result, error) {
+(s *notificationService) GetUnreadCount(userId int) (int64, error) {
+(s *notificationService) MarkAllAsRead(userId int) error {
+(s *notificationService) MarkAsRead(id int) error {
+(s *userService) GetAllUsers() ([]model.User, error) {
+(s *userService) GetUserDetail(id int) (*model.User, error) {
+(s *userService) Login(username, password string) (*model.User, string, error) {
+(s *userService) Register(user *model.User, code string) error {
+(s *userService) SendEmailCode(email string) error {
+Cors() gin.HandlerFunc {
+Error(msg string) *Result {
+GenerateToken(userId int, username string) (string, error) {
+InitDB() {
+InitRedis() {
+InitRouter() *gin.Engine {
+NewArticleController(articleService service.ArticleService, commentService service.CommentService) *ArticleController {
+NewArticleRepository(db *gorm.DB) ArticleRepository {
+NewArticleService(
+NewCommentController(svc service.CommentService) *CommentController {
+NewCommentRepository(db *gorm.DB) CommentRepository {
+NewCommentService(
+NewNotificationController(notifyService service.NotificationService) *NotificationController {
+NewNotificationRepository(db *gorm.DB) NotificationRepository {
+NewNotificationService(repo repository.NotificationRepository) NotificationService {
+NewTagRepository(db *gorm.DB) TagRepository {
+NewUserController(userService service.UserService) *UserController {
+NewUserRepository(db *gorm.DB) UserRepository {
+NewUserService(userRepo repository.UserRepository) UserService {
+Ok() *Result {
+SubString(str string, length int) string {
+main() {

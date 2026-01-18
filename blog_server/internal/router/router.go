@@ -45,6 +45,7 @@ func InitRouter() *gin.Engine {
 	commentRepo := repository.NewCommentRepository(db)
 	// [NEW] 通知 Repo
 	notifyRepo := repository.NewNotificationRepository(db)
+	replyRepo := repository.NewReplyRepository(db) // [NEW] 独立
 
 	// --- Service 层 (业务逻辑) ---
 	userSvc := service.NewUserService(userRepo)
@@ -52,9 +53,12 @@ func InitRouter() *gin.Engine {
 	// 🔴 [MODIFIED] 这里必须传入 notifyRepo
 	articleSvc := service.NewArticleService(articleRepo, tagRepo, notifyRepo, commentRepo)
 	// [NEW] 注意这里注入了 userRepo，因为 Service 里要查用户头像
-	commentSvc := service.NewCommentService(commentRepo, userRepo, notifyRepo, articleRepo)
+	// CommentService: 需要 ReplyRepo 用于级联删除
+	commentSvc := service.NewCommentService(commentRepo, userRepo, notifyRepo, articleRepo, replyRepo)
 	// [NEW] 通知 Service
 	notifySvc := service.NewNotificationService(notifyRepo)
+	// ReplyService: 独立
+	replySvc := service.NewReplyService(replyRepo, userRepo, commentRepo, notifyRepo, articleRepo)
 
 	// --- Controller 层 (接口入口) ---
 	userCtrl := controller.NewUserController(userSvc)
@@ -65,6 +69,7 @@ func InitRouter() *gin.Engine {
 	commentCtrl := controller.NewCommentController(commentSvc)
 	// [NEW] 通知 Controller
 	notifyCtrl := controller.NewNotificationController(notifySvc)
+	replyCtrl := controller.NewReplyController(replySvc) // [NEW] 独立
 
 	// ==========================================
 	// 4. 路由注册
@@ -131,18 +136,15 @@ func InitRouter() *gin.Engine {
 			notifyGroup.POST("/readAll", notifyCtrl.ReadAll)
 		}
 
-		// 💬 评论模块
+		// 💬 Comment
 		apiGroup.POST("/comment/getAPageCommentByArticleId", commentCtrl.GetComments)
 		apiGroup.POST("/comment/insert", commentCtrl.InsertComment)
-
-		// 🗣️ 回复模块
-		apiGroup.GET("/reply/getReplies", commentCtrl.GetReplies) // 可能是 GET 或 POST
-		apiGroup.POST("/reply/insert", commentCtrl.InsertReply)
-
-		// ❤️ 点赞模块
 		apiGroup.POST("/comment/likeComment", commentCtrl.LikeComment)
-		// [NEW] 专门给回复用的点赞接口
-		apiGroup.POST("/reply/likeReply", commentCtrl.LikeReply)
+
+		// 🗣️ Reply (注意：现在路由指向 replyCtrl，并且函数名严格对应 Controller 里的命名)
+		apiGroup.GET("/reply/getReplies", replyCtrl.GetReplies)
+		apiGroup.POST("/reply/insert", replyCtrl.InsertReply)  // 严格对应 InsertReply
+		apiGroup.POST("/reply/likeReply", replyCtrl.LikeReply) // 严格对应 LikeReply
 		// [NEW] 注册文章点赞接口
 		apiGroup.POST("/article/likeArticle", articleCtrl.LikeArticle)
 	}

@@ -10,26 +10,22 @@ type CommentRepository interface {
 	// 获取文章的一页评论
 	GetPageByArticleId(articleId int, page int, pageSize int) ([]model.Comment, int64, error)
 	Create(comment *model.Comment) error
-	// 获取某条评论下的所有回复
-	GetRepliesByCommentId(commentId int) ([]model.Reply, error)
-	CreateReply(reply *model.Reply) error
+
 	// [NEW] 评论点赞相关
 	FindCommentLike(userId, commentId int) (*model.CommentLike, error)
 	AddCommentLike(like *model.CommentLike) error
 	DeleteCommentLike(userId, commentId int) error
 	UpdateCommentLikesCount(commentId int, step int) error // step=1 加, step=-1 减
 
-	// [NEW] 回复点赞相关
-	FindReplyLike(userId, replyId int) (*model.ReplyLike, error)
-	AddReplyLike(like *model.ReplyLike) error
-	DeleteReplyLike(userId, replyId int) error
-	UpdateReplyLikesCount(replyId int, step int) error
 	// [NEW] 新增：分页获取评论
 	// 返回值：评论列表, 总数, 错误
 	GetPage(articleId, page, rows int) ([]*model.Comment, int64, error)
 
 	// [NEW] 更新文章的评论数
 	UpdateArticleCommentCount(articleId int, step int) error
+
+	// [FIX] 更正为 FindById
+	FindById(id int) (*model.Comment, error)
 }
 
 type commentRepository struct {
@@ -59,17 +55,6 @@ func (r *commentRepository) Create(comment *model.Comment) error {
 	return r.db.Create(comment).Error
 }
 
-// 获取回复 (一次性把该评论下的回复都查出来)
-func (r *commentRepository) GetRepliesByCommentId(commentId int) ([]model.Reply, error) {
-	var replies []model.Reply
-	err := r.db.Where("comment_id = ?", commentId).Order("created asc").Find(&replies).Error
-	return replies, err
-}
-
-func (r *commentRepository) CreateReply(reply *model.Reply) error {
-	return r.db.Create(reply).Error
-}
-
 // --- 评论点赞 ---
 func (r *commentRepository) FindCommentLike(userId, commentId int) (*model.CommentLike, error) {
 	var like model.CommentLike
@@ -88,26 +73,6 @@ func (r *commentRepository) DeleteCommentLike(userId, commentId int) error {
 func (r *commentRepository) UpdateCommentLikesCount(commentId int, step int) error {
 	// UPDATE t_comment SET likes = likes + ? WHERE id = ?
 	return r.db.Model(&model.Comment{}).Where("id = ?", commentId).
-		UpdateColumn("likes", gorm.Expr("likes + ?", step)).Error
-}
-
-// --- 回复点赞 ---
-func (r *commentRepository) FindReplyLike(userId, replyId int) (*model.ReplyLike, error) {
-	var like model.ReplyLike
-	err := r.db.Where("user_id = ? AND reply_id = ?", userId, replyId).First(&like).Error
-	return &like, err
-}
-
-func (r *commentRepository) AddReplyLike(like *model.ReplyLike) error {
-	return r.db.Create(like).Error
-}
-
-func (r *commentRepository) DeleteReplyLike(userId, replyId int) error {
-	return r.db.Where("user_id = ? AND reply_id = ?", userId, replyId).Delete(&model.ReplyLike{}).Error
-}
-
-func (r *commentRepository) UpdateReplyLikesCount(replyId int, step int) error {
-	return r.db.Model(&model.Reply{}).Where("id = ?", replyId).
 		UpdateColumn("likes", gorm.Expr("likes + ?", step)).Error
 }
 
@@ -161,4 +126,11 @@ func (r *commentRepository) UpdateArticleCommentCount(articleId int, step int) e
 	return r.db.Table("t_statistic").
 		Where("article_id = ?", articleId).
 		UpdateColumn("comments_num", gorm.Expr("comments_num + ?", step)).Error
+}
+
+// [FIX] 实现 FindById
+func (r *commentRepository) FindById(id int) (*model.Comment, error) {
+	var comment model.Comment
+	err := r.db.First(&comment, id).Error
+	return &comment, err
 }
