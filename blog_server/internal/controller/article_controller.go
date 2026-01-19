@@ -6,6 +6,7 @@ import (
 	"my-blog/pkg/utils" // 引入我们刚写的工具包
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 )
@@ -179,7 +180,20 @@ func (ctrl *ArticleController) GetArticleAndFirstPageCommentByArticleId(c *gin.C
 	// 3. [核心] 获取当前登录用户 ID
 	// 如果还没接 JWT，暂时写死 1。
 	// 如果接了，用 userId := c.GetInt("userId")
-	userId := 1
+	// [NEW] 真实逻辑：尝试解析 Token，但不强制要求
+	userId := 0 // 默认为游客
+	tokenStr := c.GetHeader("Authorization")
+	if strings.HasPrefix(tokenStr, "Bearer ") {
+		tokenStr = tokenStr[7:]
+	}
+
+	if tokenStr != "" {
+		if claims, err := utils.ParseToken(tokenStr); err == nil {
+			if v, ok := claims["userId"].(float64); ok {
+				userId = int(v)
+			}
+		}
+	}
 
 	// 4. 调用我们在 Service 层写好的“超级接口”
 	// 这个接口会同时搞定：文章详情 + 是否点赞(IsLiked) + 第一页评论
@@ -200,7 +214,7 @@ func (ctrl *ArticleController) LikeArticle(c *gin.Context) {
 	articleId, _ := strconv.Atoi(articleIdStr)
 
 	// 获取 userId (暂时写死，后续接 JWT)
-	userId := 1
+	userId := c.GetInt("userId")
 
 	msg, err := ctrl.articleService.LikeArticle(userId, articleId)
 	if err != nil {

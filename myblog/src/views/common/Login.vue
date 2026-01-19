@@ -145,6 +145,7 @@ const handleResetPassword = async () => {
 }
 
 // 登录
+// [MODIFY] 健壮的登录方法
 const handleLogin = async () => {
   if (!loginForm.username || !loginForm.password) return ElMessage.warning('请输入账号密码')
 
@@ -158,21 +159,44 @@ const handleLogin = async () => {
     })
 
     if (res.data.success) {
-      store.user.user = res.data.map.user
-      ElNotification.success(`欢迎回来，${res.data.map.user.username}`)
+      // 1. 获取后端返回的数据
+      const user = res.data.map.user
+      const token = res.data.map.token
 
-      const role = res.data.map.user.authorities[0]
-      router.push(role === 'ROLE_admin' ? '/admin_Main' : '/')
+      // 2. 存入 Store (包含 Token)
+      store.login(user, token)
+      
+      ElNotification.success(`欢迎回来，${user.username}`)
+
+      // 3. [核心修复] 安全地获取权限角色
+      // 先给一个默认值，防止 user.authorities 为空导致报错
+      let roleName = 'ROLE_common' 
+      
+      if (user.authorities && user.authorities.length > 0) {
+        const roleObj = user.authorities[0]
+        // 兼容处理：可能是对象 {"authority": "ROLE_admin"} 也可能是字符串 "ROLE_admin"
+        roleName = roleObj.authority ? roleObj.authority : roleObj
+      }
+
+      // 4. 根据角色跳转
+      if (roleName === 'ROLE_admin') {
+        router.push('/admin_Main') // 注意：请确认路由名字是 admin_Main 还是 adminMain
+      } else {
+        router.push('/')
+      }
+
     } else {
-      ElMessage.error(res.data.msg)
+      ElMessage.error(res.data.msg || '登录失败')
     }
   } catch (err) {
-    ElMessage.error("系统错误")
+    // [调试] 将具体错误打印到控制台，方便你按 F12 查看
+    console.error("登录逻辑报错:", err)
+    // 如果是代码逻辑报错，显示具体原因；如果是网络错误，显示系统错误
+    ElMessage.error(err.message || "系统错误")
   } finally {
     isLoading.value = false
   }
 }
-
 const goToRegister = () => router.push('/register')
 </script>
 

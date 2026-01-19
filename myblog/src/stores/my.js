@@ -15,14 +15,18 @@ export const useStore = defineStore(
 
     // 用户状态
     // 使用 reactive 包裹 user 属性，是为了保持和你项目中 store.user.user 的调用结构一致
-    const user = reactive({ user: null })
+    const user = reactive({ 
+      user: null, 
+      token: ''  // <--- 这里的空字符串是占位符
+      })
 
     // --- Actions / Functions ---
 
     // 登录：保存用户信息
-    function login(userData) {
+    function login(userData, tokenStr) {
       // 注意：reactive 对象直接修改属性，不需要 .value
       user.user = userData
+      user.token = tokenStr // <--- 关键：把 token 存进响应式对象里
     }
 
     // 注销：清空用户信息
@@ -30,6 +34,7 @@ export const useStore = defineStore(
       // 清空 state
       user.user = null
       // 由于开启了 persist，pinia 插件会自动把 localStorage 里的数据也同步清空
+      user.token = '' // <--- 记得一起清空
     }
 
     return { articleId, page, home, user, login, logout }

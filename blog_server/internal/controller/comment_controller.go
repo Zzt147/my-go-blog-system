@@ -87,7 +87,8 @@ func (ctrl *CommentController) LikeComment(c *gin.Context) {
 	commentId, _ := strconv.Atoi(commentIdStr)
 
 	// 获取当前用户ID (暂时写死1，或者从 Context 拿)
-	userId := 1
+	// [NEW] 替换 userId := 1
+	userId := c.GetInt("userId")
 
 	msg, err := ctrl.commentService.LikeComment(userId, commentId)
 	if err != nil {

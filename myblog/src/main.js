@@ -24,7 +24,7 @@ pinia.use(piniaPluginPersistedstate)
 
 app.component('font-awesome-icon', FontAwesomeIcon)
 
-// 3. 【关键修复】使用刚才创建并配置好的 pinia 实例，而不是 createPinia()
+// 3. 使用配置好的 pinia
 app.use(pinia)
 app.use(router)
 
@@ -42,11 +42,22 @@ for (const [key, component] of Object.entries(ElementPlusIconsVue)) {
   app.component(key, component)
 }
 
-// 引入axios和vue-axios
-import axios from 'axios'
+// -------------------------------------------------------------------------
+// [FIX] 核心修复：引入 tool.js 中配置好拦截器的 request 实例
+// -------------------------------------------------------------------------
+// ❌ 删除或注释掉原来直接引入 axios 的代码
+// import axios from 'axios' 
+
+// ✅ 引入你封装的 tool.js (注意路径)
+import request from './js/tool' 
 import VueAxios from 'vue-axios'
-app.use(VueAxios, axios)
-app.provide('axios', app.config.globalProperties.axios)
+
+// 使用配置好拦截器的 request 实例来注册 VueAxios
+app.use(VueAxios, request)
+
+// 覆盖注入 'axios'，这样组件里 inject('axios') 拿到的就是带拦截器的版本了
+app.provide('axios', request)  
+// -------------------------------------------------------------------------
 
 import vueCropper from 'vue-cropper'
 import 'vue-cropper/dist/index.css'

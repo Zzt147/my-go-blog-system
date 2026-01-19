@@ -42,10 +42,13 @@ func (ctrl *ReplyController) InsertReply(c *gin.Context) {
 		return
 	}
 
+	// [NEW] 获取真实用户ID
+	realUserId := c.GetInt("userId")
+
 	reply := model.Reply{
 		CommentId: dto.CommentId,
 		Content:   dto.Content,
-		UserId:    dto.UserId,
+		UserId:    realUserId, // [NEW] 使用 Token 中的 ID，而不是前端传的
 		ToUid:     dto.ToUid,
 		Ip:        c.ClientIP(),
 		Location:  "未知",
@@ -62,7 +65,8 @@ func (ctrl *ReplyController) InsertReply(c *gin.Context) {
 // 严格对应: LikeReply
 func (ctrl *ReplyController) LikeReply(c *gin.Context) {
 	replyId, _ := strconv.Atoi(c.Query("replyId"))
-	userId := 1 // TODO: JWT
+	// [NEW] 替换 userId := 1
+	userId := c.GetInt("userId")
 	msg, err := ctrl.replyService.LikeReply(userId, replyId)
 	if err != nil {
 		c.JSON(http.StatusOK, utils.Error("操作失败"))
