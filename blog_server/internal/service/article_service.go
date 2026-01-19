@@ -74,18 +74,23 @@ func (s *articleService) GetArticleDetail(id int) (*model.Article, error) {
 }
 
 // [NEW] 实现方法
-func (s *articleService) GetPageList(p *utils.PageParams) (*utils.Result, error) {
+func (s *articleService) GetPageList(pageParams *utils.PageParams) (*utils.Result, error) {
 	// 1. 调用 Repo 获取数据
-	articles, total, err := s.repo.GetPage(p.Page, p.Rows)
+	// [MODIFY] 将 sort 参数传递给 Repo
+	articles, total, err := s.repo.GetPage(pageParams.Page, pageParams.Rows, pageParams.Sort)
 	if err != nil {
 		return nil, err
 	}
 
+	// 更新 total
+	pageParams.Total = total
+
 	// 2. 组装成前端需要的 Result 格式
 	// 前端通常需要 total 和 rows
+	// 封装返回结果 (对应 Java: result.put("articles", articles).put("pageParams", pageParams))
 	res := utils.Ok()
-	res.Put("articles", articles) // 放入文章列表
-	res.Put("total", total)       // 放入总数
+	res.Put("articles", articles)
+	res.Put("pageParams", pageParams)
 
 	return res, nil
 }

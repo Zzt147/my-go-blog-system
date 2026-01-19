@@ -12,7 +12,8 @@ type ArticleRepository interface {
 	FindById(id int) (*model.Article, error)
 	// 以后可以在这里加 Create, Update, Delete 等方法
 	// [NEW] 分页查询：返回文章列表和总条数
-	GetPage(page int, pageSize int) ([]model.Article, int64, error)
+	// [MODIFY] 增加 sort 参数
+	GetPage(page, pageSize int, sort string) ([]model.Article, int64, error)
 	// [NEW] 新增方法
 	Create(article *model.Article) error
 	// [NEW] 更新方法
@@ -68,15 +69,26 @@ func (r *articleRepository) FindById(id int) (*model.Article, error) {
 }
 
 // [NEW] 实现分页查询
-func (r *articleRepository) GetPage(page int, pageSize int) ([]model.Article, int64, error) {
+func (r *articleRepository) GetPage(page, pageSize int, sort string) ([]model.Article, int64, error) {
 	var articles []model.Article
 	var total int64
 
 	// 1. 计算偏移量
 	offset := (page - 1) * pageSize
 
-	// 2. 构造基础查询（按时间倒序）
-	query := r.db.Model(&model.Article{}).Order("created desc")
+	// 使用 Table + Join 以便获取 hits 和 likes，并支持按 hits 排序
+	query := r.db.Table("t_article").
+		Select("t_article.*, t_statistic.likes, t_statistic.hits AS views").
+		Joins("LEFT JOIN t_statistic ON t_article.id = t_statistic.article_id")
+
+	// 处理排序逻辑
+	if sort == "hot" {
+		// [NEW] 按热度(阅读量)倒序
+		query = query.Order("t_statistic.hits DESC")
+	} else {
+		// [MODIFY] 默认按时间倒序
+		query = query.Order("t_article.created DESC")
+	}
 
 	// 3. 先查总数 (Count)
 	// 对应 Java MyBatis Plus 的 selectCount
@@ -86,9 +98,9 @@ func (r *articleRepository) GetPage(page int, pageSize int) ([]model.Article, in
 
 	// 4. 再查列表 (Limit Offset)
 	// 对应 SQL: SELECT * FROM t_article ORDER BY created DESC LIMIT 10 OFFSET 0
-	result := query.Limit(pageSize).Offset(offset).Find(&articles)
-
-	return articles, total, result.Error
+	// 查询列表
+	err := query.Limit(pageSize).Offset(offset).Find(&articles).Error
+	return articles, total, err
 }
 
 // [NEW] 实现 Create

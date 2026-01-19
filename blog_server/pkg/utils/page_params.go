@@ -8,7 +8,9 @@ type PageParams struct {
 
 	// [NEW] 新增 Total 字段
 	// 前端分页组件通常需要后端把这个总数回传给它
-	Total   int64  `json:"total"`
+	Total int64 `json:"total"`
+	// [NEW] 新增排序字段 (new=最新, hot=最热)
+	Sort string `json:"sort"`
 }
 
 // GetOffset 计算数据库查询的偏移量 (Limit ?, ?)
