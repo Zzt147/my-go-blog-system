@@ -284,3 +284,46 @@ func (ctrl *UserController) ResetPassword(c *gin.Context) {
 
 	c.JSON(http.StatusOK, utils.Ok().Put("msg", msg))
 }
+
+// [NEW] 修改用户信息 (/api/user/updateUser)
+func (ctrl *UserController) UpdateUser(c *gin.Context) {
+	var user model.User
+	if err := c.ShouldBindJSON(&user); err != nil {
+		c.JSON(http.StatusOK, utils.Error("参数错误"))
+		return
+	}
+
+	// 强制设置 userId 为当前登录用户，防止越权修改
+	user.Id = c.GetInt("userId")
+
+	updatedUser, err := ctrl.userService.UpdateUser(&user)
+	if err != nil {
+		c.JSON(http.StatusOK, utils.Error(err.Error()))
+		return
+	}
+
+	res := utils.Ok()
+	res.Put("user", updatedUser)
+	c.JSON(http.StatusOK, res)
+}
+
+// [NEW] 修改密码 (/api/user/updatePassword)
+func (ctrl *UserController) UpdatePassword(c *gin.Context) {
+	// 前端通常传: oldPwd, newPwd
+	var dto struct {
+		OldPwd string `json:"oldPwd"`
+		NewPwd string `json:"newPwd"`
+	}
+	if err := c.ShouldBindJSON(&dto); err != nil {
+		c.JSON(http.StatusOK, utils.Error("参数错误"))
+		return
+	}
+
+	userId := c.GetInt("userId")
+	if err := ctrl.userService.UpdatePassword(userId, dto.OldPwd, dto.NewPwd); err != nil {
+		c.JSON(http.StatusOK, utils.Error(err.Error()))
+		return
+	}
+
+	c.JSON(http.StatusOK, utils.Ok().Put("msg", "密码修改成功"))
+}

@@ -25,6 +25,10 @@ type UserService interface {
 	SelectByUsername(username string) (*model.User, error)
 	// [NEW] 重置密码接口
 	ResetPassword(username, email, password, code string) (string, error)
+	// [NEW] 修改用户信息
+	UpdateUser(user *model.User) (*model.User, error)
+	// [NEW] 修改密码
+	UpdatePassword(userId int, oldPwd, newPwd string) error
 }
 
 type userService struct {
@@ -228,4 +232,53 @@ func (s *userService) ResetPassword(username, email, password, code string) (str
 	config.RDB.Del(config.Ctx, key)
 
 	return "密码重置成功", nil
+}
+
+// [NEW] 修改用户信息
+func (s *userService) UpdateUser(user *model.User) (*model.User, error) {
+	// 1. 查出原用户
+	oldUser, err := s.userRepo.FindById(user.Id)
+	if err != nil {
+		return nil, errors.New("用户不存在")
+	}
+
+	// 2. 更新字段 (只允许更新昵称、邮箱、头像等，不含密码)
+	// 注意：Username 通常作为唯一标识不让改，但如果你的业务允许改，也可以覆盖
+	if user.Username != "" {
+		oldUser.Username = user.Username
+	}
+	if user.Email != "" {
+		oldUser.Email = user.Email
+	}
+	if user.Avatar != "" {
+		oldUser.Avatar = user.Avatar
+	}
+
+	// 3. 保存
+	if err := s.userRepo.Update(oldUser); err != nil {
+		return nil, err
+	}
+
+	return oldUser, nil
+}
+
+// [NEW] 修改密码
+func (s *userService) UpdatePassword(userId int, oldPwd, newPwd string) error {
+	// 1. 查用户
+	user, err := s.userRepo.FindById(userId)
+	if err != nil {
+		return errors.New("用户不存在")
+	}
+
+	// 2. 校验旧密码
+	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(oldPwd)); err != nil {
+		return errors.New("旧密码错误")
+	}
+
+	// 3. 加密新密码
+	hashedPwd, _ := bcrypt.GenerateFromPassword([]byte(newPwd), bcrypt.DefaultCost)
+	user.Password = string(hashedPwd)
+
+	// 4. 更新
+	return s.userRepo.Update(user)
 }

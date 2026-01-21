@@ -17,41 +17,43 @@ const loading = ref(false)
 const likedArticles = ref([])
 const likedComments = ref([])
 
+// 通用分页参数 (前端简单处理，一次拉取100条)
+const pageBody = { page: 1, rows: 100 }
+
 const getLikes = () => {
   if (!store.user.user) return
+  const userId = store.user.user.id
 
-  // 1. 获取点赞的文章 (修改传参方式)
-  // 错误写法: axios.post(url, { userId: ... }) -> 发送的是 JSON Body
-  // 正确写法: 拼接 URL 或使用 params
-  axios.post('/api/article/getMyLikedArticles?userId=' + store.user.user.id).then(res => {
+  // 1. 获取点赞的文章
+  // [FIX] 必须传 pageBody，否则后端 Limit 为 0
+  axios.post('/api/article/getMyLikedArticles?userId=' + userId, pageBody).then(res => {
     if (res.data.success) {
-      likedArticles.value = res.data.map.articles
+      // [FIX] 加上 || [] 防止 null 导致 length 报错
+      likedArticles.value = res.data.map.articles || []
     }
   })
 
-  // 2. 获取点赞的评论 (修改传参方式)
-  axios.post('/api/comment/getMyLikedComments?userId=' + store.user.user.id).then(res => {
+  // 2. 获取点赞的评论
+  axios.post('/api/comment/getMyLikedComments?userId=' + userId, pageBody).then(res => {
     if (res.data.success) {
-      likedComments.value = res.data.map.comments
+      likedComments.value = res.data.map.comments || []
     }
   })
 }
+
 // 表单数据
 const userInfoForm = reactive({
   id: '',
   username: '',
   name: '',
   email: '',
-  avatar: '', // 头像
-  code: '' // 【新增】验证码
+  avatar: '', 
+  code: ''
 })
 
-// --- 核心功能 1: 头像上传 ---
-// 上传成功的回调
+// 头像上传回调
 function handleAvatarSuccess(response, uploadFile) {
-  // response 是后端 FileController 返回的 Result 对象
   if (response.success) {
-    // response.map.url 就是 /api/file/images/xxx.jpg
     userInfoForm.avatar = response.map.url
     ElMessage.success('头像上传成功，请记得点击“保存修改”按钮！')
   } else {
@@ -69,7 +71,7 @@ function beforeAvatarUpload(rawFile) {
   return true
 }
 
-// 【新增】发送验证码
+// 发送验证码
 const sending = ref(false)
 const timer = ref(0)
 function sendEmailCode() {
@@ -95,38 +97,41 @@ function loadAllData() {
   if (!store.user.user) return
   const u = store.user.user
 
-  // 1. 初始化表单 (修复 Bug: 确保显示正确的数据)
   userInfoForm.id = u.id
   userInfoForm.username = u.username
   userInfoForm.name = u.name || u.username
   userInfoForm.email = u.email
   userInfoForm.avatar = u.avatar
 
-  // 2. 加载日志
+  // 1. 加载日志 (GET 请求无需 Body)
   axios.get('/api/oplog/getMyLogs?userId=' + u.id).then(res => {
-    if (res.data.success) activities.value = res.data.map.logs
+    if (res.data.success) {
+      activities.value = res.data.map.opLogs || [] // 注意：后端 OpLogService 返回的 key 可能是 opLogs
+    }
   })
 
-  // 3. 加载我的文章 (功能 4)
-  axios.post('/api/article/getMyArticles?userId=' + u.id).then(res => {
-    if (res.data.success) myArticles.value = res.data.map.articles
+  // 2. 加载我的文章 (POST 需要 Body)
+  axios.post('/api/article/getMyArticles?userId=' + u.id, pageBody).then(res => {
+    if (res.data.success) {
+      myArticles.value = res.data.map.articles || []
+    }
   })
 
-  // 4. 加载我的评论 (功能 5) - 注意这里传的是用户名，因为评论表存的是author名
-  axios.post('/api/comment/getMyComments?username=' + (u.username)).then(res => {
-    if (res.data.success) myComments.value = res.data.map.comments
+  // 3. 加载我的评论 (POST 需要 Body)
+  axios.post('/api/comment/getMyComments?userId=' + u.id, pageBody).then(res => {
+    if (res.data.success) {
+      myComments.value = res.data.map.comments || []
+    }
   })
 }
 
-// --- 提交修改 ---
+// 提交修改
 function submitUpdate() {
   axios.post('/api/user/updateInfo', userInfoForm).then(res => {
     if (res.data.success) {
       ElMessage.success('修改成功')
-      store.login(res.data.map.user) // 更新 Store
-      userInfoForm.code = '' // 清空验证码
-      // 关键：更新 Pinia 里的用户信息，解决刷新前显示旧数据的Bug
-      store.login(res.data.map.user)
+      store.login(res.data.map.user, store.user.token) // 保持 Token 不变
+      userInfoForm.code = '' 
     } else {
       ElMessage.error(res.data.msg)
     }
@@ -135,10 +140,9 @@ function submitUpdate() {
 
 onMounted(() => {
   loadAllData()
-  getLikes() // <--- 别忘了调用这个方法！原代码中可能漏了调用，或者在 tab 切换时调用
+  getLikes()
 })
 
-// 工具：日期格式化 (处理 T)
 const fmtDate = (str) => str ? str.replace('T', ' ') : ''
 </script>
 
@@ -167,10 +171,10 @@ const fmtDate = (str) => str ? str.replace('T', ' ') : ''
 
             <el-tab-pane name="timeline" label="我的足迹">
               <el-scrollbar max-height="500px">
-                <el-timeline v-if="activities.length > 0" style="padding-top: 10px;">
+                <el-timeline v-if="activities && activities.length > 0" style="padding-top: 10px;">
                   <el-timeline-item v-for="(act, i) in activities" :key="i" :timestamp="fmtDate(act.created)"
                     placement="top" :color="act.type === 'COMMENT' ? '#409EFF' : '#909399'">
-                    <span v-if="act.targetId && (act.type === 'BROWSE' || act.type === 'COMMENT')"
+                    <span v-if="act.targetId"
                       @click="$router.push('/article_comment/' + act.targetId)" style="cursor: pointer;"
                       class="log-content">
                       {{ act.content }}
@@ -184,7 +188,7 @@ const fmtDate = (str) => str ? str.replace('T', ' ') : ''
 
             <el-tab-pane name="articles" label="我的文章">
               <el-scrollbar max-height="500px">
-                <div v-if="myArticles.length > 0">
+                <div v-if="myArticles && myArticles.length > 0">
                   <div v-for="art in myArticles" :key="art.id" class="list-item"
                     @click="$router.push('/article_comment/' + art.id)">
                     <span class="item-title">{{ art.title }}</span>
@@ -200,7 +204,7 @@ const fmtDate = (str) => str ? str.replace('T', ' ') : ''
 
                 <el-tab-pane label="赞过的文章">
                   <el-scrollbar max-height="500px">
-                    <div v-if="likedArticles.length > 0">
+                    <div v-if="likedArticles && likedArticles.length > 0">
                       <div v-for="item in likedArticles" :key="item.id" class="list-item"
                         @click="$router.push('/article_comment/' + item.id)">
                         <div class="item-left">
@@ -218,9 +222,9 @@ const fmtDate = (str) => str ? str.replace('T', ' ') : ''
 
                 <el-tab-pane label="赞过的评论">
                   <el-scrollbar max-height="500px">
-                    <div v-if="likedComments.length > 0">
+                    <div v-if="likedComments && likedComments.length > 0">
                       <div v-for="item in likedComments" :key="item.id" class="list-item comment-list-item"
-                        @click="$router.push('/article_comment/' + (item.articleId || item.refId))">
+                        @click="$router.push('/article_comment/' + item.articleId)">
                         <div class="comment-wrapper">
                           <div class="comment-text">
                             <el-icon class="icon-prefix comment-icon">
@@ -229,7 +233,7 @@ const fmtDate = (str) => str ? str.replace('T', ' ') : ''
                             <span>{{ item.content }}</span>
                           </div>
                           <div class="comment-source">
-                            原文: <span class="source-title">《{{ item.targetName || '未知文章' }}》</span>
+                            原文: <span class="source-title">《{{ item.articleTitle || '未知文章' }}》</span>
                           </div>
                         </div>
                         <span class="item-date">{{ fmtDate(item.created) }}</span>
@@ -244,20 +248,14 @@ const fmtDate = (str) => str ? str.replace('T', ' ') : ''
 
             <el-tab-pane name="comments" label="我的评论">
               <el-scrollbar max-height="500px">
-                <div v-if="myComments.length > 0">
+                <div v-if="myComments && myComments.length > 0">
                   <div v-for="cmt in myComments" :key="cmt.id" class="list-item"
                     @click="$router.push('/article_comment/' + cmt.articleId)">
 
                     <div style="width: 100%;">
                       <div class="cmt-header">
-                        <span v-if="cmt.type === 'COMMENT'">
-                          评论了文章 <span class="highlight">《{{ cmt.targetTitle }}》</span>
-                        </span>
-                        <span v-else>
-                          在 <span class="highlight">《{{ cmt.articleTitle }}》</span> 中回复了
-                          <span class="highlight">@{{ cmt.targetUser }}</span>
-                          <span style="color:#999; font-size:12px; margin-left:5px;">: {{ cmt.targetContent.substring(0,
-                            10) }}...</span>
+                        <span>
+                          评论了文章 <span class="highlight">《{{ cmt.articleTitle || '未知文章' }}》</span>
                         </span>
                         <span class="item-date" style="float: right;">{{ fmtDate(cmt.created) }}</span>
                       </div>
@@ -274,7 +272,7 @@ const fmtDate = (str) => str ? str.replace('T', ' ') : ''
             </el-tab-pane>
 
             <el-tab-pane name="settings" label="资料设置">
-              <el-form label-width="80px" style="max-width: 500px; margin-top: 20px;">
+               <el-form label-width="80px" style="max-width: 500px; margin-top: 20px;">
                 <el-form-item label="头像">
                   <el-upload class="avatar-uploader" action="/api/file/upload" :show-file-list="false"
                     :on-success="handleAvatarSuccess" :before-upload="beforeAvatarUpload" name="file">
@@ -315,6 +313,7 @@ const fmtDate = (str) => str ? str.replace('T', ' ') : ''
 </template>
 
 <style scoped>
+/* 保持原有 CSS 不变 */
 .center-container {
   max-width: 1100px;
   margin: 30px auto;

@@ -26,6 +26,12 @@ type CommentRepository interface {
 
 	// [FIX] 更正为 FindById
 	FindById(id int) (*model.Comment, error)
+
+	// [NEW] 获取我的评论
+	FindByUserId(userId int, page, pageSize int) ([]model.Comment, int64, error)
+
+	// [NEW] 获取我点赞的评论
+	GetMyLikedComments(userId, page, pageSize int) ([]model.Comment, int64, error)
 }
 
 type commentRepository struct {
@@ -133,4 +139,49 @@ func (r *commentRepository) FindById(id int) (*model.Comment, error) {
 	var comment model.Comment
 	err := r.db.First(&comment, id).Error
 	return &comment, err
+}
+
+// [MODIFY] 获取我的评论 (修复列表为空的问题)
+func (r *commentRepository) FindByUserId(userId int, page, pageSize int) ([]model.Comment, int64, error) {
+	var comments []model.Comment
+	var total int64
+	if page < 1 {
+		page = 1
+	}
+	offset := (page - 1) * pageSize
+
+	query := r.db.Model(&model.Comment{}).Where("user_id = ?", userId).Order("created desc")
+
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	err := query.Limit(pageSize).Offset(offset).Find(&comments).Error
+	return comments, total, err
+}
+
+// [MODIFY] 获取我点赞的评论 (修复 Error 1054)
+func (r *commentRepository) GetMyLikedComments(userId, page, pageSize int) ([]model.Comment, int64, error) {
+	var comments []model.Comment
+	var total int64
+	if page < 1 {
+		page = 1
+	}
+	offset := (page - 1) * pageSize
+
+	// 关键修改：
+	// 1. 使用 Model(&model.Comment{}) 明确主表
+	// 2. Joins 中指定具体的 ON 条件
+	// 3. 去掉 Select("t_comment.*")，GORM Model 会自动选择主表字段
+	query := r.db.Model(&model.Comment{}).
+		Joins("JOIN t_comment_like ON t_comment_like.comment_id = t_comment.id").
+		Where("t_comment_like.user_id = ?", userId).
+		Order("t_comment_like.created desc")
+
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	err := query.Limit(pageSize).Offset(offset).Find(&comments).Error
+	return comments, total, err
 }

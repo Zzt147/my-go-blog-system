@@ -34,6 +34,9 @@ type ArticleCondition struct {
 	CategoryId int    `json:"categoryId"`
 	Title      string `json:"title"`
 	Content    string `json:"content"`
+
+	// [NEW] 新增用户ID筛选 (用于"我的文章")
+	UserId int `json:"userId"`
 }
 
 // TableName 指定表名为 t_article

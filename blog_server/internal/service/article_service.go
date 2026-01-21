@@ -35,6 +35,9 @@ type ArticleService interface {
 
 	// [NEW] 文章搜索
 	Search(pageParams *utils.PageParams, articleCondition *model.ArticleCondition) (*utils.Result, error)
+
+	// [NEW] 获取我点赞的文章
+	GetMyLikedArticles(userId int, pageParams *utils.PageParams) (*utils.Result, error)
 }
 
 // 2. 结构体
@@ -264,6 +267,19 @@ func (s *articleService) GetReadRanking() ([]model.Article, error) {
 func (s *articleService) Search(p *utils.PageParams, condition *model.ArticleCondition) (*utils.Result, error) {
 	// 调用 Repo 进行搜索
 	articles, total, err := s.repo.Search(p.Page, p.Rows, condition)
+	if err != nil {
+		return nil, err
+	}
+
+	res := utils.Ok()
+	res.Put("articles", articles)
+	res.Put("total", total)
+	return res, nil
+}
+
+// [NEW] 实现 GetMyLikedArticles
+func (s *articleService) GetMyLikedArticles(userId int, p *utils.PageParams) (*utils.Result, error) {
+	articles, total, err := s.repo.GetMyLikedArticles(userId, p.Page, p.Rows)
 	if err != nil {
 		return nil, err
 	}

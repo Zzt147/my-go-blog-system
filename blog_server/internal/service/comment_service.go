@@ -13,39 +13,45 @@ type CommentService interface {
 	AddComment(comment *model.Comment) error
 	// [NEW] 点赞
 	LikeComment(userId, commentId int) (string, error) // 返回 "点赞成功" 或 "取消点赞"
+
+	// [NEW] 获取我的评论
+	GetMyComments(userId int, pageParams *utils.PageParams) (*utils.Result, error)
+
+	// [NEW] 获取我点赞的评论
+	GetMyLikedComments(userId int, pageParams *utils.PageParams) (*utils.Result, error)
 }
 
 type commentService struct {
-	repo     repository.CommentRepository
 	userRepo repository.UserRepository
 
 	// [NEW] 注入通知服务和文章Repo (为了查文章作者)
 	notifyRepo  repository.NotificationRepository
 	articleRepo repository.ArticleRepository
 
-	replyRepo repository.ReplyRepository
+	replyRepo   repository.ReplyRepository
+	commentRepo repository.CommentRepository
 }
 
 // [MODIFIED] 修改构造函数，注入新的依赖
 func NewCommentService(
-	repo repository.CommentRepository,
+	commentRepo repository.CommentRepository,
 	userRepo repository.UserRepository,
 	notifyRepo repository.NotificationRepository, // 新增
-	articleRepo repository.ArticleRepository,     // 新增
+	articleRepo repository.ArticleRepository, // 新增
 	replyRepo repository.ReplyRepository,
 ) CommentService {
 	return &commentService{
-		repo:        repo,
 		userRepo:    userRepo,
 		notifyRepo:  notifyRepo,
 		articleRepo: articleRepo,
 		replyRepo:   replyRepo,
+		commentRepo: commentRepo,
 	}
 }
 
 // 获取评论列表
 func (s *commentService) GetComments(articleId int, p *utils.PageParams) (*utils.Result, error) {
-	comments, total, err := s.repo.GetPageByArticleId(articleId, p.Page, p.Rows)
+	comments, total, err := s.commentRepo.GetPageByArticleId(articleId, p.Page, p.Rows)
 	if err != nil {
 		return nil, err
 	}
@@ -96,12 +102,12 @@ func (s *commentService) AddComment(comment *model.Comment) error {
 	comment.Status = "approved"
 
 	// 1. 存评论
-	if err := s.repo.Create(comment); err != nil {
+	if err := s.commentRepo.Create(comment); err != nil {
 		return err
 	}
 
 	// 2. [NEW] ✅ 统计数 +1 (异步执行即可，不影响主流程)
-	go s.repo.UpdateArticleCommentCount(comment.ArticleId, 1)
+	go s.commentRepo.UpdateArticleCommentCount(comment.ArticleId, 1)
 
 	// 2. [NEW] 发送通知 (复刻 NotificationAspect)
 	go func() { // 开个协程异步发，不卡主线程
@@ -129,12 +135,12 @@ func (s *commentService) AddComment(comment *model.Comment) error {
 // [NEW] 实现评论点赞
 func (s *commentService) LikeComment(userId, commentId int) (string, error) {
 	// 1. 查是否点过
-	like, _ := s.repo.FindCommentLike(userId, commentId)
+	like, _ := s.commentRepo.FindCommentLike(userId, commentId)
 
 	if like != nil && like.Id > 0 {
 		// 已点过 -> 取消
-		s.repo.DeleteCommentLike(userId, commentId)
-		s.repo.UpdateCommentLikesCount(commentId, -1)
+		s.commentRepo.DeleteCommentLike(userId, commentId)
+		s.commentRepo.UpdateCommentLikesCount(commentId, -1)
 		return "取消点赞", nil
 	} else {
 		// 未点过 -> 点赞
@@ -143,8 +149,48 @@ func (s *commentService) LikeComment(userId, commentId int) (string, error) {
 			CommentId: commentId,
 			Created:   time.Now(),
 		}
-		s.repo.AddCommentLike(newLike)
-		s.repo.UpdateCommentLikesCount(commentId, 1)
+		s.commentRepo.AddCommentLike(newLike)
+		s.commentRepo.UpdateCommentLikesCount(commentId, 1)
 		return "点赞成功", nil
 	}
+}
+
+// [NEW] 实现 GetMyComments
+func (s *commentService) GetMyComments(userId int, p *utils.PageParams) (*utils.Result, error) {
+	comments, total, err := s.commentRepo.FindByUserId(userId, p.Page, p.Rows)
+	if err != nil {
+		return nil, err
+	}
+
+	// 补充文章标题信息 (可选，看前端是否需要)
+	for i, c := range comments {
+		if article, err := s.articleRepo.FindById(c.ArticleId); err == nil {
+			comments[i].ArticleTitle = article.Title
+		}
+	}
+
+	res := utils.Ok()
+	res.Put("comments", comments)
+	res.Put("total", total)
+	return res, nil
+}
+
+// [NEW] 实现 GetMyLikedComments
+func (s *commentService) GetMyLikedComments(userId int, p *utils.PageParams) (*utils.Result, error) {
+	comments, total, err := s.commentRepo.GetMyLikedComments(userId, p.Page, p.Rows)
+	if err != nil {
+		return nil, err
+	}
+
+	// 补充文章标题信息 (和 GetMyComments 逻辑一样)
+	for i, c := range comments {
+		if article, err := s.articleRepo.FindById(c.ArticleId); err == nil {
+			comments[i].ArticleTitle = article.Title
+		}
+	}
+
+	res := utils.Ok()
+	res.Put("comments", comments)
+	res.Put("total", total)
+	return res, nil
 }

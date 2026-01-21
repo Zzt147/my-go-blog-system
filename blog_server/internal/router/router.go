@@ -54,6 +54,9 @@ func InitRouter() *gin.Engine {
 	// [NEW] 通知 Repo
 	notifyRepo := repository.NewNotificationRepository(db)
 	replyRepo := repository.NewReplyRepository(db) // [NEW] 独立
+	opLogRepo := repository.NewOpLogRepository(db) // [NEW]
+	// [NEW]
+	categoryRepo := repository.NewCategoryRepository(db)
 
 	// --- Service 层 (业务逻辑) ---
 	// [NEW] Service (新增 MailService)
@@ -70,6 +73,9 @@ func InitRouter() *gin.Engine {
 	notifySvc := service.NewNotificationService(notifyRepo)
 	// ReplyService: 独立
 	replySvc := service.NewReplyService(replyRepo, userRepo, commentRepo, notifyRepo, articleRepo)
+	opLogSvc := service.NewOpLogService(opLogRepo) // [NEW]
+	// [NEW] 注入 ArticleRepo 以便级联操作文章
+	categorySvc := service.NewCategoryService(categoryRepo, articleRepo)
 
 	// --- Controller 层 (接口入口) ---
 	userCtrl := controller.NewUserController(userSvc)
@@ -81,6 +87,9 @@ func InitRouter() *gin.Engine {
 	// [NEW] 通知 Controller
 	notifyCtrl := controller.NewNotificationController(notifySvc)
 	replyCtrl := controller.NewReplyController(replySvc) // [NEW] 独立
+	opLogCtrl := controller.NewOpLogController(opLogSvc) // [NEW]
+	// [NEW]
+	categoryCtrl := controller.NewCategoryController(categorySvc)
 
 	// ==========================================
 	// 4. 路由注册
@@ -188,6 +197,39 @@ func InitRouter() *gin.Engine {
 				// 标记全部已读 (一键清除)
 				notifyGroup.POST("/readAll", notifyCtrl.ReadAll)
 			}
+
+			// 1. 用户个人中心操作
+			authGroup.POST("/user/updateUser", userCtrl.UpdateUser)
+			authGroup.POST("/user/updatePassword", userCtrl.UpdatePassword)
+
+			// 1. 我的文章 (POST)
+			// 原路径: /article/getAPageOfArticle (错) -> 修正为: /article/getMyArticles
+			authGroup.POST("/article/getMyArticles", articleCtrl.GetMyArticles)
+
+			// 2. 我点赞的文章 (POST)
+			// 原路径: /article/getAPageOfMyLike (错) -> 修正为: /article/getMyLikedArticles
+			authGroup.POST("/article/getMyLikedArticles", articleCtrl.GetMyLikedArticles)
+
+			// 3. 我的评论 (POST)
+			// 原路径: /comment/getAPageOfMyComment (错) -> 修正为: /comment/getMyComments
+			authGroup.POST("/comment/getMyComments", commentCtrl.GetMyComments)
+
+			// 4. 我点赞的评论 (POST)
+			// 新增路径
+			authGroup.POST("/comment/getMyLikedComments", commentCtrl.GetMyLikedComments)
+
+			// 5. 我的足迹 (GET)
+			// 原路径: POST /opLog/getAPageOfOpLog (错) -> 修正为: GET /oplog/getMyLogs
+			// 注意：前端路径是 /oplog/... (小写oplog)，后端必须匹配
+			authGroup.GET("/oplog/getMyLogs", opLogCtrl.GetPage)
+
+			// [NEW] Category Management (分类管理)
+			authGroup.GET("/category/getTree", categoryCtrl.GetTree)
+			authGroup.GET("/category/getResources", categoryCtrl.GetResources)
+			authGroup.POST("/category/add", categoryCtrl.Add)
+			authGroup.POST("/category/update", categoryCtrl.Update)
+			authGroup.POST("/category/updateBatch", categoryCtrl.UpdateBatch)
+			authGroup.POST("/category/delete", categoryCtrl.Delete)
 		}
 	}
 

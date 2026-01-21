@@ -2,6 +2,7 @@ package repository
 
 import (
 	"my-blog/internal/model"
+
 	"gorm.io/gorm"
 )
 
@@ -13,6 +14,9 @@ type UserRepository interface {
 	// [修复] 补上这两个缺失的方法定义
 	FindByEmail(email string) (*model.User, error)
 	Create(user *model.User) error
+
+	// [NEW] 更新用户
+	Update(user *model.User) error
 }
 
 // 结构体实现
@@ -66,4 +70,9 @@ func (r *userRepository) FindByEmail(email string) (*model.User, error) {
 		return nil, result.Error
 	}
 	return &user, nil
+}
+
+// [NEW] 更新用户实现
+func (r *userRepository) Update(user *model.User) error {
+	return r.db.Save(user).Error
 }

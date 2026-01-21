@@ -101,3 +101,64 @@ func (ctrl *CommentController) LikeComment(c *gin.Context) {
 	res.Msg = msg // 这样前端 res.data.msg 就能读到 "点赞成功" 或 "取消点赞"
 	c.JSON(http.StatusOK, res)
 }
+
+// [NEW] 获取我的评论
+func (ctrl *CommentController) GetMyComment(c *gin.Context) {
+	var params utils.PageParams
+	c.ShouldBindJSON(&params)
+	userId := c.GetInt("userId")
+
+	res, err := ctrl.commentService.GetMyComments(userId, &params)
+	if err != nil {
+		c.JSON(http.StatusOK, utils.Error(err.Error()))
+		return
+	}
+	c.JSON(http.StatusOK, res)
+}
+
+// [NEW] 对应路由 POST /api/comment/getMyComments
+// [MODIFY] 获取我的评论
+func (ctrl *CommentController) GetMyComments(c *gin.Context) {
+	var params utils.PageParams
+	c.ShouldBindJSON(&params)
+
+	// [FIX] 设置默认值
+	if params.Page <= 0 {
+		params.Page = 1
+	}
+	if params.Rows <= 0 {
+		params.Rows = 10
+	}
+
+	userId := c.GetInt("userId")
+
+	res, err := ctrl.commentService.GetMyComments(userId, &params)
+	if err != nil {
+		c.JSON(http.StatusOK, utils.Error(err.Error()))
+		return
+	}
+	c.JSON(http.StatusOK, res)
+}
+
+// [MODIFY] 获取我点赞的评论
+func (ctrl *CommentController) GetMyLikedComments(c *gin.Context) {
+	var params utils.PageParams
+	c.ShouldBindJSON(&params)
+
+	// [FIX] 设置默认值
+	if params.Page <= 0 {
+		params.Page = 1
+	}
+	if params.Rows <= 0 {
+		params.Rows = 10
+	}
+
+	userId := c.GetInt("userId")
+
+	res, err := ctrl.commentService.GetMyLikedComments(userId, &params)
+	if err != nil {
+		c.JSON(http.StatusOK, utils.Error(err.Error()))
+		return
+	}
+	c.JSON(http.StatusOK, res)
+}

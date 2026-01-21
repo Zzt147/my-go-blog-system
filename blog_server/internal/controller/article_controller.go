@@ -263,3 +263,65 @@ func (ctrl *ArticleController) ArticleSearch(c *gin.Context) {
 
 	c.JSON(http.StatusOK, result)
 }
+
+// [NEW] 获取我的点赞文章
+func (ctrl *ArticleController) GetMyLike(c *gin.Context) {
+	var params utils.PageParams
+	c.ShouldBindJSON(&params)
+	userId := c.GetInt("userId")
+
+	res, err := ctrl.articleService.GetMyLikedArticles(userId, &params)
+	if err != nil {
+		c.JSON(http.StatusOK, utils.Error(err.Error()))
+		return
+	}
+	c.JSON(http.StatusOK, res)
+}
+
+// [MODIFY] 获取我的文章
+func (ctrl *ArticleController) GetMyArticles(c *gin.Context) {
+	var params utils.PageParams
+	c.ShouldBindJSON(&params)
+
+	// [FIX] 关键修复：设置默认分页参数，防止 Limit(0) 导致查询为空
+	if params.Page <= 0 {
+		params.Page = 1
+	}
+	if params.Rows <= 0 {
+		params.Rows = 10
+	}
+
+	condition := &model.ArticleCondition{
+		UserId: c.GetInt("userId"),
+	}
+
+	res, err := ctrl.articleService.Search(&params, condition)
+	if err != nil {
+		c.JSON(http.StatusOK, utils.Error(err.Error()))
+		return
+	}
+	c.JSON(http.StatusOK, res)
+}
+
+// [MODIFY] 获取我点赞的文章
+func (ctrl *ArticleController) GetMyLikedArticles(c *gin.Context) {
+	var params utils.PageParams
+	c.ShouldBindJSON(&params)
+
+	// [FIX] 关键修复：设置默认分页参数
+	if params.Page <= 0 {
+		params.Page = 1
+	}
+	if params.Rows <= 0 {
+		params.Rows = 10
+	}
+
+	userId := c.GetInt("userId")
+
+	res, err := ctrl.articleService.GetMyLikedArticles(userId, &params)
+	if err != nil {
+		c.JSON(http.StatusOK, utils.Error(err.Error()))
+		return
+	}
+	c.JSON(http.StatusOK, res)
+}

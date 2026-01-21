@@ -30,12 +30,21 @@ type ArticleRepository interface {
 
 	// [NEW] 新增：更新阅读量
 	UpdateReadCount(articleId int) error
-
 	// [NEW] 获取阅读排行 (按 hits 倒序)
 	GetReadRanking(limit int) ([]model.Article, error)
 
-	// [NEW] 文章搜索 (支持按标签筛选)
+	// 需要修复的方法
 	Search(page, pageSize int, condition *model.ArticleCondition) ([]model.Article, int64, error)
+	GetMyLikedArticles(userId, page, pageSize int) ([]model.Article, int64, error)
+
+	// [NEW] 根据分类ID查询文章 (用于 getResources)
+	FindByCategoryId(categoryId int) ([]model.Article, error)
+
+	// [NEW] 批量更新文章的分类 (用于删除分类模式1: 移动文章到父级)
+	UpdateCategoryId(oldCategoryId, newCategoryId int) error
+
+	// [NEW] 根据分类ID删除文章 (用于删除分类模式2: 销毁文章)
+	DeleteByCategoryId(categoryId int) error
 }
 
 // 2. 结构体实现
@@ -211,37 +220,82 @@ func (r *articleRepository) GetReadRanking(limit int) ([]model.Article, error) {
 	return articles, err
 }
 
-// [NEW] 文章搜索实现
+// [NEW] 实现获取我点赞的文章
+// 逻辑：联表 t_article 和 t_article_like
+// [MODIFY] 修复 GetMyLikedArticles
+func (r *articleRepository) GetMyLikedArticles(userId, page, pageSize int) ([]model.Article, int64, error) {
+	var articles []model.Article
+	var total int64
+	if page < 1 {
+		page = 1
+	}
+	offset := (page - 1) * pageSize
+
+	// 修正：使用 Model 自动映射
+	query := r.db.Model(&model.Article{}).
+		Select("t_article.*, t_statistic.likes, t_statistic.hits AS views").
+		Joins("JOIN t_article_like ON t_article_like.article_id = t_article.id").
+		Joins("LEFT JOIN t_statistic ON t_article.id = t_statistic.article_id").
+		Where("t_article_like.user_id = ?", userId).
+		Order("t_article_like.created desc")
+
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	err := query.Limit(pageSize).Offset(offset).Find(&articles).Error
+	return articles, total, err
+}
+
+// [MODIFY] 修复 Search / SearchV2 (对应 Controller 里的 GetMyArticles)
+// 请确保 Controller 调用的是这个 repo 方法
 func (r *articleRepository) Search(page, pageSize int, condition *model.ArticleCondition) ([]model.Article, int64, error) {
 	var articles []model.Article
 	var total int64
+	if page < 1 {
+		page = 1
+	}
 	offset := (page - 1) * pageSize
 
-	// 构造基础查询
-	// 关键修改1：使用 Table 而不是 Model，以便进行 Join 操作
-	// 关键修改2：Select 中增加 AS views，确保列表页也能显示阅读量
 	query := r.db.Table("t_article").
 		Select("t_article.*, t_statistic.likes, t_statistic.hits AS views").
 		Joins("LEFT JOIN t_statistic ON t_article.id = t_statistic.article_id").
 		Order("t_article.created desc")
 
-	// 动态 SQL (对应 Java queryWrapper)
 	if condition != nil {
 		if condition.Tag != "" {
-			// 注意：这里需要明确指定表名 t_article.tags，避免字段歧义（如果有的话）
 			query = query.Where("t_article.tags LIKE ?", "%"+condition.Tag+"%")
 		}
-		// 这里预留了 CategoryId, Title 等扩展位置，严格遵循 Java ArticleCondition
+		if condition.UserId > 0 {
+			query = query.Where("t_article.user_id = ?", condition.UserId)
+		}
 	}
 
-	// 查总数
-	// 查总数 (Count 时尽量移除 Select 和 Order 以提高性能，但 GORM 的 Count 会自动处理)
-	// 注意：对于连表查询的 Count，GORM 通常能处理，但为了稳健，直接对 query 计数
 	if err := query.Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
 
-	// 查列表
-	result := query.Limit(pageSize).Offset(offset).Find(&articles)
-	return articles, total, result.Error
+	err := query.Limit(pageSize).Offset(offset).Find(&articles).Error
+	return articles, total, err
+}
+
+// [NEW] 根据分类ID查询
+func (r *articleRepository) FindByCategoryId(categoryId int) ([]model.Article, error) {
+	var articles []model.Article
+	// 这里假设 t_article 表中有 category_id 字段 (如果没有请在数据库添加)
+	// 对应 Go Model 中的 CategoryId
+	err := r.db.Where("category_id = ?", categoryId).Order("created desc").Find(&articles).Error
+	return articles, err
+}
+
+// [NEW] 移动文章分类
+func (r *articleRepository) UpdateCategoryId(oldCategoryId, newCategoryId int) error {
+	return r.db.Model(&model.Article{}).
+		Where("category_id = ?", oldCategoryId).
+		Update("category_id", newCategoryId).Error
+}
+
+// [NEW] 删除某分类下的所有文章
+func (r *articleRepository) DeleteByCategoryId(categoryId int) error {
+	return r.db.Where("category_id = ?", categoryId).Delete(&model.Article{}).Error
 }
