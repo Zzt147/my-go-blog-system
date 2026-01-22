@@ -65,7 +65,8 @@ func InitRouter() *gin.Engine {
 	userSvc := service.NewUserService(userRepo, mailSvc)
 	// [NEW] ArticleService 现在需要注入两个 Repo (Article + Tag)
 	// 🔴 [MODIFIED] 这里必须传入 notifyRepo
-	articleSvc := service.NewArticleService(articleRepo, tagRepo, notifyRepo, commentRepo)
+	//原来: articleSvc := service.NewArticleService(articleRepo, tagRepo, notifyRepo, commentRepo)
+	articleSvc := service.NewArticleService(articleRepo, tagRepo, notifyRepo, commentRepo, categoryRepo)
 	// [NEW] 注意这里注入了 userRepo，因为 Service 里要查用户头像
 	// CommentService: 需要 ReplyRepo 用于级联删除
 	commentSvc := service.NewCommentService(commentRepo, userRepo, notifyRepo, articleRepo, replyRepo)

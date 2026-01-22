@@ -26,6 +26,12 @@ type Article struct {
 
 	// isLiked 是纯业务字段，数据库完全没有，还是保持 gorm:"-"
 	IsLiked bool `gorm:"-" json:"isLiked"`
+
+	// [NEW] 新增字段，对应刚才添加的数据库列
+	CategoryId int `gorm:"column:category_id" json:"categoryId"`
+
+	// 辅助字段
+	CommentCount int `gorm:"-" json:"commentCount"`
 }
 
 // [NEW] 文章查询条件 (对应 Java 的 ArticleCondition)

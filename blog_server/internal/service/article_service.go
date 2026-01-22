@@ -6,6 +6,7 @@ import (
 	"my-blog/internal/model"
 	"my-blog/internal/repository"
 	"my-blog/pkg/utils" // 引入我们刚写的工具包
+	"strings"           // 引入 strings 包
 	"time"
 )
 
@@ -48,6 +49,8 @@ type articleService struct {
 	notifyRepo repository.NotificationRepository
 	// [NEW] 新增：为了获取评论列表，需要注入评论仓库
 	commentRepo repository.CommentRepository
+	// [NEW] 注入 CategoryRepo 以便在发布时反查分类ID
+	categoryRepo repository.CategoryRepository
 }
 
 // 3. 构造函数
@@ -56,13 +59,15 @@ func NewArticleService(
 	repo repository.ArticleRepository,
 	tagRepo repository.TagRepository,
 	notifyRepo repository.NotificationRepository,
-	commentRepo repository.CommentRepository, // 新增参数
+	commentRepo repository.CommentRepository,   // 新增参数
+	categoryRepo repository.CategoryRepository, // [NEW] 新增参数
 ) ArticleService {
 	return &articleService{
-		repo:        repo,
-		tagRepo:     tagRepo,
-		notifyRepo:  notifyRepo,
-		commentRepo: commentRepo,
+		repo:         repo,
+		tagRepo:      tagRepo,
+		notifyRepo:   notifyRepo,
+		commentRepo:  commentRepo,
+		categoryRepo: categoryRepo,
 	}
 }
 
@@ -113,6 +118,49 @@ func (s *articleService) Publish(article *model.Article, isEdit bool) error {
 	// 1. 设置默认缩略图 (复刻 Java 逻辑)
 	if article.Thumbnail == "" {
 		article.Thumbnail = "/api/images/6.png"
+	}
+
+	// [FIX] 核心修复：后端自动计算 CategoryId
+	// 如果前端没传 CategoryId (为0)，但传了分类路径 Categories (e.g. "技术/后端/Java")
+	if article.CategoryId == 0 && article.Categories != "" {
+		// 1. 分割路径
+		pathNames := strings.Split(article.Categories, "/")
+
+		// 2. 逐层查找 ID
+		parentId := 0
+		foundId := 0
+
+		for _, name := range pathNames {
+			// 在当前 parentId 下查找名为 name 的子分类
+			children, err := s.categoryRepo.FindByParentId(parentId)
+			if err != nil {
+				// 查询出错，中止
+				foundId = 0
+				break
+			}
+
+			// 遍历寻找匹配项
+			matched := false
+			for _, child := range children {
+				if child.Name == name {
+					parentId = child.Id
+					foundId = child.Id
+					matched = true
+					break
+				}
+			}
+
+			// 如果某一层没找到，说明路径无效或分类不存在
+			if !matched {
+				foundId = 0
+				break
+			}
+		}
+
+		// 3. 如果找到了最终 ID，赋值给 article
+		if foundId > 0 {
+			article.CategoryId = foundId
+		}
 	}
 
 	// 2. 自动填充时间

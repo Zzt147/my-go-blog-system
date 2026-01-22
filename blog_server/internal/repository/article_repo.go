@@ -257,11 +257,12 @@ func (r *articleRepository) Search(page, pageSize int, condition *model.ArticleC
 	}
 	offset := (page - 1) * pageSize
 
+	// 1. 构建基础 Query (暂时不加 Select，避免被 Count 清除或干扰)
 	query := r.db.Table("t_article").
-		Select("t_article.*, t_statistic.likes, t_statistic.hits AS views").
 		Joins("LEFT JOIN t_statistic ON t_article.id = t_statistic.article_id").
 		Order("t_article.created desc")
 
+	// 2. 应用筛选条件
 	if condition != nil {
 		if condition.Tag != "" {
 			query = query.Where("t_article.tags LIKE ?", "%"+condition.Tag+"%")
@@ -271,20 +272,28 @@ func (r *articleRepository) Search(page, pageSize int, condition *model.ArticleC
 		}
 	}
 
+	// 3. 先查总数
 	if err := query.Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
 
-	err := query.Limit(pageSize).Offset(offset).Find(&articles).Error
+	// 4. 再查列表 (此时显式加上 Select)
+	// 修复：确保 Select 在 Find 之前应用，防止 Count 操作导致 Select 丢失
+	err := query.Select("t_article.*, t_statistic.likes, t_statistic.hits AS views").
+		Limit(pageSize).Offset(offset).Find(&articles).Error
 	return articles, total, err
 }
 
 // [NEW] 根据分类ID查询
+// [MODIFY] 修复：显式 Select 确保字段被查出
 func (r *articleRepository) FindByCategoryId(categoryId int) ([]model.Article, error) {
 	var articles []model.Article
-	// 这里假设 t_article 表中有 category_id 字段 (如果没有请在数据库添加)
-	// 对应 Go Model 中的 CategoryId
-	err := r.db.Where("category_id = ?", categoryId).Order("created desc").Find(&articles).Error
+	// 使用 Model(&model.Article{}) 确保表名正确
+	// 这里的 Find 会自动映射所有字段
+	err := r.db.Model(&model.Article{}).
+		Where("category_id = ?", categoryId).
+		Order("created desc").
+		Find(&articles).Error
 	return articles, err
 }
 
